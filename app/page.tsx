@@ -1,9 +1,8 @@
 'use client'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   AlertTriangle,
-  ArrowRight,
   Bell,
   ChevronRight,
   CircleDollarSign,
@@ -12,8 +11,8 @@ import {
   Plus,
   Search,
   Truck,
-  UserRound,
-  X 
+  X,
+  Filter
 } from 'lucide-react'
 
 type CustomerStatus = 'fresh' | 'soon' | 'urgent'
@@ -226,9 +225,13 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
 export default function Page() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [precioBidon, setPrecioBidon] = useState(2000); // Valor por defecto hasta que cargue localStorage
+  const [precioBidon, setPrecioBidon] = useState(2000); 
+  const [barriosConfigurados, setBarriosConfigurados] = useState<string[]>([]);
   
   const [busqueda, setBusqueda] = useState('');
+  const [filtroActivo, setFiltroActivo] = useState('Todos'); 
+  const [barrioSeleccionado, setBarrioSeleccionado] = useState('Todos');
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -251,11 +254,28 @@ export default function Page() {
 
   useEffect(() => {
     cargarClientes();
-    
-    // Leemos el precio que configuraste en Ajustes
     const precioGuardado = localStorage.getItem('precioBidon');
     if (precioGuardado) {
       setPrecioBidon(Number(precioGuardado));
+    }
+
+    // Leemos los barrios configurados desde Ajustes
+    const barriosGuardados = localStorage.getItem('barriosRuta');
+    if (barriosGuardados) {
+      try {
+        const parsed = JSON.parse(barriosGuardados);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setBarriosConfigurados(parsed);
+          // Si el formulario nuevo está vacío, le asignamos el primer barrio por defecto para comodidad
+          setAddForm(prev => ({ ...prev, barrio: parsed[0] }));
+        }
+      } catch (e) {
+        setBarriosConfigurados(['Centro', 'Villa San Martín', 'Las Flores', 'San José']);
+        setAddForm(prev => ({ ...prev, barrio: 'Centro' }));
+      }
+    } else {
+      setBarriosConfigurados(['Centro', 'Villa San Martín', 'Las Flores', 'San José']);
+      setAddForm(prev => ({ ...prev, barrio: 'Centro' }));
     }
   }, []);
 
@@ -293,7 +313,7 @@ export default function Page() {
 
       if (response.ok) {
         setIsAddOpen(false);
-        setAddForm({ nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1, barrio: '', latitud: '', longitud: '' });
+        setAddForm({ nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1, barrio: barriosConfigurados[0] || '', latitud: '', longitud: '' });
         cargarClientes();
       } else {
         alert("Error al crear el cliente");
@@ -306,16 +326,38 @@ export default function Page() {
     }
   };
 
-  const clientesFiltrados = clientes.filter(cliente => 
-    cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-    (cliente.barrio && cliente.barrio.toLowerCase().includes(busqueda.toLowerCase()))
-  );
+  const clientesFiltrados = useMemo(() => {
+    return clientes.filter(cliente => {
+      const matchesSearch = cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        (cliente.barrio && cliente.barrio.toLowerCase().includes(busqueda.toLowerCase())) ||
+        cliente.direccion.toLowerCase().includes(busqueda.toLowerCase());
+
+      const deudaNumerica = Number(cliente.deuda_actual);
+      
+      const fechaEntrega = cliente.fecha_ultima_entrega ? new Date(cliente.fecha_ultima_entrega) : null;
+      const diasPasados = fechaEntrega ? Math.floor((new Date().getTime() - fechaEntrega.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+      const level = !cliente.fecha_ultima_entrega ? 0 : 100 - ((diasPasados / cliente.consumo_semanal_estimado) * 100);
+      const esUrgente = level <= 20 || !cliente.fecha_ultima_entrega;
+
+      const matchesFilter = 
+        filtroActivo === 'Todos' ||
+        (filtroActivo === 'Urgentes' && esUrgente) ||
+        (filtroActivo === 'Con Deuda' && deudaNumerica > 0) ||
+        (filtroActivo === 'Al Día' && deudaNumerica === 0);
+
+      const matchesBarrio = 
+        barrioSeleccionado === 'Todos' || 
+        (cliente.barrio && cliente.barrio.toLowerCase().trim() === barrioSeleccionado.toLowerCase().trim());
+
+      return matchesSearch && matchesFilter && matchesBarrio;
+    });
+  }, [clientes, busqueda, filtroActivo, barrioSeleccionado]);
 
   return (
     <main className="min-h-screen bg-[#f7faff] text-slate-900 pb-20 relative">
       <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-3xl flex-col px-5 py-4 sm:px-8 sm:py-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="mx-auto flex max-w-3xl flex-col px-5 py-4 sm:px-8 sm:py-5 space-y-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-600/20">
                 <Droplets aria-hidden="true" className="size-5 fill-current" />
@@ -325,20 +367,54 @@ export default function Page() {
                 <h1 className="text-lg font-extrabold tracking-tight text-slate-900">Aguas Mas</h1>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button aria-label="Notificaciones" className="rounded-full p-2.5 text-slate-500 hover:bg-slate-100"><Bell aria-hidden="true" className="size-5" /></button>
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              {clientesFiltrados.length} clientes
+            </span>
+          </div>
+
+          {/* BUSCADOR Y SELECTOR DE BARRIO */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar por nombre o barrio..." 
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-sky-500 focus:bg-white focus:outline-none"
+              />
+            </div>
+
+            <div className="relative shrink-0">
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                <Filter className="size-3.5" />
+              </div>
+              <select
+                value={barrioSeleccionado}
+                onChange={(e) => setBarrioSeleccionado(e.target.value)}
+                className="h-full rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-8 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none cursor-pointer appearance-none"
+              >
+                <option value="Todos">Todos los barrios</option>
+                {barriosConfigurados.map((barrio) => (
+                  <option key={barrio} value={barrio}>{barrio}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar por nombre o barrio..." 
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm font-medium focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-500/10"
-            />
+          {/* FILTROS RÁPIDOS */}
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
+            {['Todos', 'Urgentes', 'Con Deuda', 'Al Día'].map((option) => (
+              <button 
+                key={option} 
+                onClick={() => setFiltroActivo(option)} 
+                className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+                  filtroActivo === option ? 'bg-sky-600 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-500 hover:text-sky-600'
+                }`}
+              >
+                {option}
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -416,16 +492,21 @@ export default function Page() {
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
                 />
               </div>
+              
+              {/* SELECTOR DE BARRIO DINÁMICO EN EL FORMULARIO DE NUEVO CLIENTE */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Barrio</label>
-                <input 
-                  type="text" 
+                <select
                   value={addForm.barrio}
                   onChange={(e) => setAddForm({...addForm, barrio: e.target.value})}
-                  placeholder="Ej. Centro"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
-                />
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all font-semibold text-sm cursor-pointer"
+                >
+                  {barriosConfigurados.map((barrio) => (
+                    <option key={barrio} value={barrio}>{barrio}</option>
+                  ))}
+                </select>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Teléfono</label>

@@ -11,7 +11,8 @@ import {
   Phone,
   Receipt,
   ShoppingBag,
-  X
+  X,
+  Trash2
 } from 'lucide-react'
 
 interface Entrega {
@@ -44,7 +45,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   
   const [isPagarOpen, setIsPagarOpen] = useState(false);
-  // SOLUCIÓN AL CERO MOLESTO: Permitimos que el estado sea un número o un texto vacío
   const [montoPago, setMontoPago] = useState<number | ''>('');
   const [isSubmittingPago, setIsSubmittingPago] = useState(false);
   
@@ -52,6 +52,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
   const [editForm, setEditForm] = useState({
@@ -69,7 +70,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       .then(res => res.json())
       .then(data => {
         setCliente(data);
-        // Si la deuda es 0, dejamos el campo vacío para que no moleste el cero
         const deuda = Number(data.deuda_actual);
         setMontoPago(deuda > 0 ? deuda : '');
         
@@ -144,6 +144,32 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       alert("Error de conexión");
     } finally {
       setIsSubmittingEdit(false);
+    }
+  };
+
+  // NUEVA FUNCIÓN PARA ELIMINAR CLIENTE
+  const handleEliminarCliente = async () => {
+    if (!window.confirm(`¿Estás seguro de eliminar a ${cliente?.nombre}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`https://envasadora-mas.onrender.com/api/clientes/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Redirigir a la pantalla principal después de eliminar
+        window.location.href = '/';
+      } else {
+        alert("Error al eliminar el cliente");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error de conexión");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -274,7 +300,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <span className="text-sm font-bold text-slate-700">¿Cuánto te pagó?</span>
                 <div className="flex-1 relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
-                  {/* SOLUCIÓN AL CERO MOLESTO APLICADA AQUÍ */}
                   <input 
                     type="number" 
                     value={montoPago}
@@ -474,13 +499,25 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               </div>
             </div>
 
-            <button 
-              onClick={handleGuardarEdicion}
-              disabled={isSubmittingEdit}
-              className="w-full py-3.5 bg-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-600/30 hover:bg-sky-700 disabled:opacity-50 transition-all"
-            >
-              {isSubmittingEdit ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
+            <div className="space-y-2">
+              <button 
+                onClick={handleGuardarEdicion}
+                disabled={isSubmittingEdit}
+                className="w-full py-3.5 bg-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-600/30 hover:bg-sky-700 disabled:opacity-50 transition-all"
+              >
+                {isSubmittingEdit ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+
+              {/* BOTÓN DE ELIMINAR CLIENTE */}
+              <button 
+                onClick={handleEliminarCliente}
+                disabled={isDeleting}
+                className="w-full py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 className="size-4" />
+                {isDeleting ? 'Eliminando...' : 'Eliminar Cliente'}
+              </button>
+            </div>
           </div>
         </div>
       )}

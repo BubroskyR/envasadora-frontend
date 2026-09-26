@@ -1,30 +1,64 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Settings, DollarSign } from 'lucide-react'
+import { Save, Settings, DollarSign, MapPin, Plus, X } from 'lucide-react'
 
 export default function AjustesPage() {
   const [precio, setPrecio] = useState<number | ''>('')
+  const [barrios, setBarrios] = useState<string[]>([])
+  const [nuevoBarrio, setNuevoBarrio] = useState('')
   const [guardado, setGuardado] = useState(false)
 
-  // Al abrir la pantalla, leemos el precio que estaba guardado
+  // Al abrir la pantalla, leemos el precio y los barrios de localStorage
   useEffect(() => {
     const precioGuardado = localStorage.getItem('precioBidon')
     if (precioGuardado) {
       setPrecio(Number(precioGuardado))
     } else {
-      setPrecio(2000) // Precio por defecto si nunca se guardó nada
+      setPrecio(2000)
+    }
+
+    const barriosGuardados = localStorage.getItem('barriosRuta')
+    if (barriosGuardados) {
+      try {
+        const parsed = JSON.parse(barriosGuardados)
+        if (Array.isArray(parsed)) {
+          setBarrios(parsed)
+        }
+      } catch (e) {
+        // Fallback por si estaban guardados como texto plano antes
+        setBarrios(['Centro', 'Villa San Martín', 'Las Flores', 'San José'])
+      }
+    } else {
+      setBarrios(['Centro', 'Villa San Martín', 'Las Flores', 'San José'])
     }
   }, [])
 
-  // Al presionar guardar, lo escribimos en la memoria del celular
+  // Agregar un barrio a la lista temporal
+  const handleAgregarBarrio = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nuevoBarrio.trim()) return
+    const nombreLimpio = nuevoBarrio.trim()
+    if (!barrios.includes(nombreLimpio)) {
+      setBarrios([...barrios, nombreLimpio])
+    }
+    setNuevoBarrio('')
+  }
+
+  // Eliminar un barrio de la lista
+  const handleEliminarBarrio = (barrioAEliminar: string) => {
+    setBarrios(barrios.filter(b => b !== barrioAEliminar))
+  }
+
+  // Guardar todo en localStorage
   const handleGuardar = () => {
     if (precio !== '') {
       localStorage.setItem('precioBidon', precio.toString())
-      setGuardado(true)
-      // El cartel de "Guardado" desaparece después de 3 segundos
-      setTimeout(() => setGuardado(false), 3000)
     }
+    // Guardamos la lista como un string JSON
+    localStorage.setItem('barriosRuta', JSON.stringify(barrios))
+    setGuardado(true)
+    setTimeout(() => setGuardado(false), 3000)
   }
 
   return (
@@ -38,11 +72,12 @@ export default function AjustesPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-2xl px-5 pt-6 sm:px-8">
+      <div className="mx-auto max-w-2xl px-5 pt-6 sm:px-8 space-y-6">
+        {/* SECCIÓN 1: PRECIO GLOBAL */}
         <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] sm:p-6">
           <h2 className="text-lg font-bold text-slate-900 mb-5">Configuración General</h2>
           
-          <div className="mb-6">
+          <div className="mb-2">
             <label className="block text-sm font-semibold text-slate-700 mb-2">
               Precio global del bidón ($)
             </label>
@@ -63,19 +98,72 @@ export default function AjustesPage() {
               Este precio se aplicará automáticamente a todas las nuevas entregas que registres.
             </p>
           </div>
-
-          <button 
-            onClick={handleGuardar}
-            className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 ${
-              guardado 
-                ? 'bg-emerald-500 shadow-emerald-500/30' 
-                : 'bg-sky-600 shadow-sky-600/30 hover:bg-sky-700'
-            }`}
-          >
-            <Save className="size-5" />
-            {guardado ? '¡Precio Guardado!' : 'Guardar Precio'}
-          </button>
         </section>
+
+        {/* SECCIÓN 2: ADMINISTRADOR DE BARRIOS INTERACTIVO */}
+        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.06)] sm:p-6">
+          <h2 className="text-lg font-bold text-slate-900 mb-2">Barrios de Reparto</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Agrega o elimina los barrios que aparecerán en el selector de la ruta principal.
+          </p>
+
+          {/* Formulario para agregar barrio */}
+          <form onSubmit={handleAgregarBarrio} className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 size-4" />
+              <input 
+                type="text"
+                value={nuevoBarrio}
+                onChange={(e) => setNuevoBarrio(e.target.value)}
+                placeholder="Nombre del barrio..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none text-sm font-medium"
+              />
+            </div>
+            <button 
+              type="submit"
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-sky-600 text-white text-sm font-bold rounded-xl shadow-md shadow-sky-600/20 hover:bg-sky-700 transition"
+            >
+              <Plus className="size-4" />
+              Agregar
+            </button>
+          </form>
+
+          {/* Lista de barrios en formato de etiquetas (Chips) */}
+          <div className="flex flex-wrap gap-2 pt-2">
+            {barrios.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No hay barrios cargados aún.</p>
+            ) : (
+              barrios.map((b) => (
+                <span 
+                  key={b} 
+                  className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-200 px-3 py-1 text-xs font-bold text-sky-700 shadow-sm"
+                >
+                  {b}
+                  <button 
+                    type="button"
+                    onClick={() => handleEliminarBarrio(b)}
+                    className="text-sky-400 hover:text-rose-600 transition"
+                    aria-label={`Eliminar ${b}`}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        </section>
+
+        <button 
+          onClick={handleGuardar}
+          className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 ${
+            guardado 
+              ? 'bg-emerald-500 shadow-emerald-500/30' 
+              : 'bg-sky-600 shadow-sky-600/30 hover:bg-sky-700'
+          }`}
+        >
+          <Save className="size-5" />
+          {guardado ? '¡Configuración Guardada!' : 'Guardar Cambios'}
+        </button>
       </div>
     </main>
   )
