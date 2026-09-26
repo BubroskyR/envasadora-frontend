@@ -1,14 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { BarChart3, Map, Truck, User } from 'lucide-react'
+import { BarChart3, Map, Truck, Settings } from 'lucide-react' // Cambiamos User por Settings
 import { usePathname } from 'next/navigation'
 
 const navigationItems = [
   { label: 'Ruta', href: '/', icon: Truck },
   { label: 'Mapa', href: '/rutas', icon: Map },
   { label: 'Finanzas', href: '/finanzas', icon: BarChart3 },
-  { label: 'Ajustes', href: '#', icon: User },
+  { label: 'Ajustes', href: '/ajustes', icon: Settings }, // Actualizamos el enlace aquí
 ]
 
 export function BottomNavigation() {

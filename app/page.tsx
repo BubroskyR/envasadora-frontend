@@ -25,7 +25,7 @@ interface Cliente {
   fecha_ultima_entrega: string | null;
   consumo_semanal_estimado: number;
   deuda_actual: string;
-  barrio?: string; // Agregado para el filtro
+  barrio?: string;
 }
 
 const statusStyles = {
@@ -226,9 +226,8 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
 export default function Page() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [precioBidon, setPrecioBidon] = useState(2000);
+  const [precioBidon, setPrecioBidon] = useState(2000); // Valor por defecto hasta que cargue localStorage
   
-  // NUEVOS ESTADOS: Buscador y Modal de Creación
   const [busqueda, setBusqueda] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
@@ -252,6 +251,12 @@ export default function Page() {
 
   useEffect(() => {
     cargarClientes();
+    
+    // Leemos el precio que configuraste en Ajustes
+    const precioGuardado = localStorage.getItem('precioBidon');
+    if (precioGuardado) {
+      setPrecioBidon(Number(precioGuardado));
+    }
   }, []);
 
   const handleGetLocation = () => {
@@ -301,7 +306,6 @@ export default function Page() {
     }
   };
 
-  // Lógica de filtrado por búsqueda
   const clientesFiltrados = clientes.filter(cliente => 
     cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     (cliente.barrio && cliente.barrio.toLowerCase().includes(busqueda.toLowerCase()))
@@ -326,7 +330,6 @@ export default function Page() {
             </div>
           </div>
 
-          {/* BUSCADOR INTEGRADO EN EL HEADER */}
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <input 
@@ -348,18 +351,6 @@ export default function Page() {
             </p>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">Mis clientes</h2>
             <p className="mt-2 text-sm text-slate-500">{clientesFiltrados.length} clientes encontrados.</p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-sm font-semibold text-slate-600">Precio Bidón: $</span>
-              <input 
-                type="number" 
-                value={precioBidon}
-                onChange={(e) => setPrecioBidon(Number(e.target.value))}
-                className="w-20 text-base font-bold text-sky-600 outline-none bg-transparent"
-              />
-            </div>
           </div>
         </section>
 
@@ -383,7 +374,6 @@ export default function Page() {
         )}
       </div>
 
-      {/* BOTÓN FLOTANTE */}
       <div className="fixed bottom-24 right-5 sm:right-auto sm:left-1/2 sm:ml-[300px] z-30">
         <button 
           onClick={() => setIsAddOpen(true)}
@@ -394,7 +384,6 @@ export default function Page() {
         </button>
       </div>
 
-      {/* MODAL DE NUEVO CLIENTE */}
       {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
