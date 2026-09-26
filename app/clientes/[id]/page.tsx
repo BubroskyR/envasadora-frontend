@@ -44,18 +44,16 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   
   const [isPagarOpen, setIsPagarOpen] = useState(false);
-  const [montoPago, setMontoPago] = useState(0);
+  // SOLUCIÓN AL CERO MOLESTO: Permitimos que el estado sea un número o un texto vacío
+  const [montoPago, setMontoPago] = useState<number | ''>('');
   const [isSubmittingPago, setIsSubmittingPago] = useState(false);
   
   const [mesSeleccionado, setMesSeleccionado] = useState<string>('todos');
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
-  
-  // ESTADO NUEVO: Agregamos el estado de carga del GPS
   const [isLocating, setIsLocating] = useState(false);
 
-  // INTEGRACIÓN: Agregamos barrio, latitud y longitud al form existente
   const [editForm, setEditForm] = useState({
     nombre: '',
     direccion: '',
@@ -71,8 +69,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       .then(res => res.json())
       .then(data => {
         setCliente(data);
-        setMontoPago(Number(data.deuda_actual));
-        // INTEGRACIÓN: Precargamos las coordenadas si existen
+        // Si la deuda es 0, dejamos el campo vacío para que no moleste el cero
+        const deuda = Number(data.deuda_actual);
+        setMontoPago(deuda > 0 ? deuda : '');
+        
         setEditForm({
           nombre: data.nombre,
           direccion: data.direccion,
@@ -96,6 +96,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   }, [id]);
 
   const handleRegistrarPago = async () => {
+    if (montoPago === '' || montoPago <= 0) return;
+    
     setIsSubmittingPago(true);
     try {
       const response = await fetch('https://envasadora-mas.onrender.com/api/pagos', {
@@ -103,7 +105,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cliente_id: cliente?.id,
-          monto_pago: montoPago,
+          monto_pago: Number(montoPago),
           metodo_pago: 'Efectivo'
         })
       });
@@ -145,7 +147,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  // NUEVA FUNCIÓN: Obtiene el GPS y actualiza editForm sin borrar lo demás
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       alert('Tu navegador no soporta la geolocalización.');
@@ -273,10 +274,14 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <span className="text-sm font-bold text-slate-700">¿Cuánto te pagó?</span>
                 <div className="flex-1 relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                  {/* SOLUCIÓN AL CERO MOLESTO APLICADA AQUÍ */}
                   <input 
                     type="number" 
                     value={montoPago}
-                    onChange={(e) => setMontoPago(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMontoPago(val === '' ? '' : Number(val));
+                    }}
                     className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
@@ -290,7 +295,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 </button>
                 <button 
                   onClick={handleRegistrarPago}
-                  disabled={isSubmittingPago || montoPago <= 0}
+                  disabled={isSubmittingPago || montoPago === '' || montoPago <= 0}
                   className="flex-1 py-2.5 rounded-lg font-bold text-white bg-emerald-500 shadow-md shadow-emerald-500/20 hover:bg-emerald-600 transition disabled:opacity-50"
                 >
                   {isSubmittingPago ? 'Guardando...' : 'Confirmar'}
@@ -375,7 +380,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
       {isEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          {/* Aumenté un poco el max-h y agregué scroll por si la pantalla es pequeña */}
           <div className="bg-white rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
             <button 
               onClick={() => setIsEditOpen(false)}
@@ -434,7 +438,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 />
               </div>
 
-              {/* NUEVA SECCIÓN: Coordenadas y Botón GPS */}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 mt-2">
                 <div className="mb-3 flex items-center justify-between">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Ubicación (GPS)</label>
