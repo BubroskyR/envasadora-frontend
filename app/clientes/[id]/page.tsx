@@ -7,11 +7,11 @@ import {
   ChevronDown,
   Droplets,
   MapPin,
-  Pencil, // <-- Nuevo ícono importado
+  Pencil,
   Phone,
   Receipt,
   ShoppingBag,
-  X // <-- Ícono para cerrar el modal
+  X
 } from 'lucide-react'
 
 interface Entrega {
@@ -30,6 +30,9 @@ interface Cliente {
   telefono: string;
   consumo_semanal_estimado: number;
   deuda_actual: string;
+  barrio?: string;
+  latitud?: string;
+  longitud?: string;
 }
 
 const money = (value: number) => `$${value.toLocaleString('es-AR')}`
@@ -46,14 +49,21 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   
   const [mesSeleccionado, setMesSeleccionado] = useState<string>('todos');
 
-  // NUEVOS ESTADOS PARA LA EDICIÓN DEL PERFIL
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  
+  // ESTADO NUEVO: Agregamos el estado de carga del GPS
+  const [isLocating, setIsLocating] = useState(false);
+
+  // INTEGRACIÓN: Agregamos barrio, latitud y longitud al form existente
   const [editForm, setEditForm] = useState({
     nombre: '',
     direccion: '',
     telefono: '',
-    consumo_semanal_estimado: 1
+    consumo_semanal_estimado: 1,
+    barrio: '',
+    latitud: '',
+    longitud: ''
   });
 
   const cargarDatos = () => {
@@ -62,12 +72,15 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
       .then(data => {
         setCliente(data);
         setMontoPago(Number(data.deuda_actual));
-        // Pre-cargamos el formulario con los datos actuales
+        // INTEGRACIÓN: Precargamos las coordenadas si existen
         setEditForm({
           nombre: data.nombre,
           direccion: data.direccion,
           telefono: data.telefono || '',
-          consumo_semanal_estimado: data.consumo_semanal_estimado
+          consumo_semanal_estimado: data.consumo_semanal_estimado,
+          barrio: data.barrio || '',
+          latitud: data.latitud || '',
+          longitud: data.longitud || ''
         });
       })
       .catch(err => console.error("Error al cargar cliente:", err));
@@ -109,7 +122,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  // NUEVA FUNCIÓN: Enviar los datos editados al backend
   const handleGuardarEdicion = async () => {
     setIsSubmittingEdit(true);
     try {
@@ -121,7 +133,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
       if (response.ok) {
         setIsEditOpen(false);
-        cargarDatos(); // Recargamos para ver los cambios
+        cargarDatos();
       } else {
         alert("Error al actualizar el perfil");
       }
@@ -131,6 +143,32 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     } finally {
       setIsSubmittingEdit(false);
     }
+  };
+
+  // NUEVA FUNCIÓN: Obtiene el GPS y actualiza editForm sin borrar lo demás
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Tu navegador no soporta la geolocalización.');
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setEditForm(prev => ({
+          ...prev,
+          latitud: position.coords.latitude.toString(),
+          longitud: position.coords.longitude.toString()
+        }));
+        setIsLocating(false);
+      },
+      (error) => {
+        console.error("Error obteniendo ubicación:", error);
+        alert('No se pudo obtener la ubicación. Revisa los permisos del celular.');
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true }
+    );
   };
 
   if (!cliente) {
@@ -157,7 +195,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <ArrowLeft aria-hidden="true" className="size-5" />
           </button>
           <h1 className="text-base font-extrabold tracking-tight text-slate-900">Perfil del Cliente</h1>
-          {/* BOTÓN PARA ABRIR EL MODAL DE EDICIÓN */}
           <button 
             onClick={() => setIsEditOpen(true)}
             aria-label="Editar perfil" 
@@ -180,7 +217,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-950">{cliente.nombre}</h2>
               <p className="mt-1.5 flex items-start gap-1.5 text-sm leading-5 text-slate-500">
                 <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-slate-400" />
-                <span>{cliente.direccion}</span>
+                <span>{cliente.direccion} {cliente.barrio && `- ${cliente.barrio}`}</span>
               </p>
             </div>
           </div>
@@ -336,10 +373,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </section>
       </div>
 
-      {/* EL MODAL FLOTANTE DE EDICIÓN */}
       {isEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative">
+          {/* Aumenté un poco el max-h y agregué scroll por si la pantalla es pequeña */}
+          <div className="bg-white rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
             <button 
               onClick={() => setIsEditOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"
@@ -369,6 +406,16 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 />
               </div>
               <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Barrio</label>
+                <input 
+                  type="text" 
+                  value={editForm.barrio}
+                  onChange={(e) => setEditForm({...editForm, barrio: e.target.value})}
+                  placeholder="Ej. Centro"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Teléfono</label>
                 <input 
                   type="text" 
@@ -385,6 +432,42 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   onChange={(e) => setEditForm({...editForm, consumo_semanal_estimado: Number(e.target.value)})}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
                 />
+              </div>
+
+              {/* NUEVA SECCIÓN: Coordenadas y Botón GPS */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 mt-2">
+                <div className="mb-3 flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Ubicación (GPS)</label>
+                  <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    disabled={isLocating}
+                    className="flex items-center gap-1.5 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-bold text-sky-700 transition hover:bg-sky-200 disabled:opacity-50"
+                  >
+                    <MapPin className="size-3.5" />
+                    {isLocating ? 'Buscando...' : 'Obtener GPS'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="text"
+                      value={editForm.latitud}
+                      onChange={(e) => setEditForm({...editForm, latitud: e.target.value})}
+                      placeholder="Latitud"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={editForm.longitud}
+                      onChange={(e) => setEditForm({...editForm, longitud: e.target.value})}
+                      placeholder="Longitud"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
