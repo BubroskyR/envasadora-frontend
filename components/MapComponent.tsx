@@ -5,8 +5,10 @@ import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { useEffect } from 'react'
 
+import type { CustomerStatus } from '@/lib/clientes'
+
 // Arreglo para que los íconos de Leaflet se vean bien en Next.js
-const customIcon = (color: string) => new L.Icon({
+const crearIcono = (color: string) => new L.Icon({
   iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
   iconSize: [25, 41],
@@ -15,12 +17,19 @@ const customIcon = (color: string) => new L.Icon({
   shadowSize: [41, 41]
 });
 
+// Se crean una sola vez y se reutilizan, en lugar de crear un ícono nuevo por marcador en cada render
+const iconos: Record<CustomerStatus, L.Icon> = {
+  urgent: crearIcono('red'),
+  soon: crearIcono('gold'),
+  fresh: crearIcono('green'),
+};
+
 interface ClienteProps {
   id: number;
   nombre: string;
-  latitud: string;
-  longitud: string;
-  estado_agua: 'urgent' | 'soon' | 'supplied';
+  latitud?: string;
+  longitud?: string;
+  estado_agua: CustomerStatus;
 }
 
 export default function MapComponent({ clientes }: { clientes: ClienteProps[] }) {
@@ -43,16 +52,12 @@ export default function MapComponent({ clientes }: { clientes: ClienteProps[] })
         
         {clientes.map(cliente => {
           if (!cliente.latitud || !cliente.longitud) return null;
-          
-          let colorMarker = 'green';
-          if (cliente.estado_agua === 'urgent') colorMarker = 'red';
-          if (cliente.estado_agua === 'soon') colorMarker = 'gold';
 
           return (
             <Marker 
               key={cliente.id} 
               position={[Number(cliente.latitud), Number(cliente.longitud)]}
-              icon={customIcon(colorMarker)}
+              icon={iconos[cliente.estado_agua]}
             >
               <Popup>
                 <div className="text-center font-bold text-slate-800">

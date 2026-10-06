@@ -1,62 +1,46 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Save, Settings, DollarSign, MapPin, Plus, X } from 'lucide-react'
+import { guardarAjustes, useAjustes } from '@/lib/ajustes'
 
 export default function AjustesPage() {
-  const [precio, setPrecio] = useState<number | ''>('')
-  const [barrios, setBarrios] = useState<string[]>([])
+  const ajustes = useAjustes()
+
+  // Borradores locales: mientras el usuario no edite (null), se muestran los valores guardados.
+  const [precioDraft, setPrecioDraft] = useState<number | '' | null>(null)
+  const [barriosDraft, setBarriosDraft] = useState<string[] | null>(null)
+  const precio = precioDraft ?? ajustes.precioBidon
+  const barrios = barriosDraft ?? ajustes.barrios
+
   const [nuevoBarrio, setNuevoBarrio] = useState('')
   const [guardado, setGuardado] = useState(false)
-
-  // Al abrir la pantalla, leemos el precio y los barrios de localStorage
-  useEffect(() => {
-    const precioGuardado = localStorage.getItem('precioBidon')
-    if (precioGuardado) {
-      setPrecio(Number(precioGuardado))
-    } else {
-      setPrecio(2000)
-    }
-
-    const barriosGuardados = localStorage.getItem('barriosRuta')
-    if (barriosGuardados) {
-      try {
-        const parsed = JSON.parse(barriosGuardados)
-        if (Array.isArray(parsed)) {
-          setBarrios(parsed)
-        }
-      } catch (e) {
-        // Fallback por si estaban guardados como texto plano antes
-        setBarrios(['Centro', 'Villa San Martín', 'Las Flores', 'San José'])
-      }
-    } else {
-      setBarrios(['Centro', 'Villa San Martín', 'Las Flores', 'San José'])
-    }
-  }, [])
 
   // Agregar un barrio a la lista temporal
   const handleAgregarBarrio = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!nuevoBarrio.trim()) return
     const nombreLimpio = nuevoBarrio.trim()
+    if (!nombreLimpio) return
     if (!barrios.includes(nombreLimpio)) {
-      setBarrios([...barrios, nombreLimpio])
+      setBarriosDraft([...barrios, nombreLimpio])
     }
     setNuevoBarrio('')
   }
 
   // Eliminar un barrio de la lista
   const handleEliminarBarrio = (barrioAEliminar: string) => {
-    setBarrios(barrios.filter(b => b !== barrioAEliminar))
+    setBarriosDraft(barrios.filter(b => b !== barrioAEliminar))
   }
 
   // Guardar todo en localStorage
   const handleGuardar = () => {
-    if (precio !== '') {
-      localStorage.setItem('precioBidon', precio.toString())
-    }
-    // Guardamos la lista como un string JSON
-    localStorage.setItem('barriosRuta', JSON.stringify(barrios))
+    guardarAjustes({
+      // Si el campo de precio quedó vacío o inválido, se conserva el precio anterior
+      precioBidon: precio !== '' && precio > 0 ? precio : ajustes.precioBidon,
+      barrios,
+    })
+    setPrecioDraft(null)
+    setBarriosDraft(null)
     setGuardado(true)
     setTimeout(() => setGuardado(false), 3000)
   }
@@ -85,10 +69,11 @@ export default function AjustesPage() {
               <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 size-5" />
               <input 
                 type="number" 
+                min="1"
                 value={precio}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setPrecio(val === '' ? '' : Number(val));
+                  setPrecioDraft(val === '' ? '' : Number(val));
                 }}
                 className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all font-bold text-lg"
                 placeholder="Ej. 2000"

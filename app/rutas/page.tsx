@@ -1,44 +1,62 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, MapPin, MessageCircle, Menu, Users } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import { apiGet } from '@/lib/api'
+import { bidonesUltimaEntregaPorCliente, calcularEstado, type Cliente, type EntregaBasica } from '@/lib/clientes'
 
 // Carga dinámica obligatoria para Leaflet en Next.js
 const MapComponent = dynamic(() => import('@/components/MapComponent'), { ssr: false })
 
 export default function RutasPage() {
-  const [clientes, setClientes] = useState<any[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [entregas, setEntregas] = useState<EntregaBasica[]>([])
   const [selectedNeighborhood, setSelectedNeighborhood] = useState('Todos')
   const [isLoading, setIsLoading] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
 
   useEffect(() => {
-    fetch('https://envasadora-mas.onrender.com/api/clientes')
-      .then(res => res.json())
-      .then(data => {
-        // Calculamos el estado de agua basado en la fecha_ultima_entrega (si la tuvieras)
-        // Por ahora, simularemos el cálculo si no existe el dato en todos los clientes
-        const clientesCalculados = data.map((c: any) => ({
-          ...c,
-          // Lógica temporal para prueba: si debe plata = rojo, sino verde (luego lo ajustamos por fecha)
-          estado_agua: Number(c.deuda_actual) > 0 ? 'urgent' : 'supplied' 
-        }))
-        setClientes(clientesCalculados)
-        setIsLoading(false)
+    Promise.all([
+      apiGet<Cliente[]>('/clientes'),
+      // Si las entregas fallan, el mapa se muestra igual con una estimación semanal
+      apiGet<EntregaBasica[]>('/entregas').catch(() => [])
+    ])
+      .then(([datosClientes, datosEntregas]) => {
+        setClientes(datosClientes)
+        setEntregas(datosEntregas)
       })
+      .catch(err => {
+        console.error('Error al cargar clientes:', err)
+        setErrorCarga(true)
+      })
+      .finally(() => setIsLoading(false))
   }, [])
 
-  // Extraer barrios únicos de la BD
-  const barriosDB = Array.from(new Set(clientes.filter(c => c.barrio).map(c => c.barrio)))
-  const barrios = ['Todos', ...barriosDB]
+  // El color de cada marcador usa el mismo cálculo de nivel de agua que la pantalla de Ruta
+  const clientesConEstado = useMemo(() => {
+    const bidones = bidonesUltimaEntregaPorCliente(entregas)
+    const ahora = new Date()
+    return clientes.map(c => ({
+      ...c,
+      estado_agua: calcularEstado(c, bidones.get(c.id), ahora).status,
+    }))
+  }, [clientes, entregas])
 
-  const clientesVisibles = selectedNeighborhood === 'Todos' 
-    ? clientes 
-    : clientes.filter(c => c.barrio === selectedNeighborhood)
+  // Extraer barrios únicos de la BD
+  const barrios = useMemo(
+    () => ['Todos', ...new Set(clientes.flatMap(c => (c.barrio ? [c.barrio] : [])))],
+    [clientes]
+  )
+
+  const clientesVisibles = selectedNeighborhood === 'Todos'
+    ? clientesConEstado
+    : clientesConEstado.filter(c => c.barrio === selectedNeighborhood)
 
   const clientesConCoords = clientesVisibles.filter(c => c.latitud && c.longitud).length
 
   if (isLoading) return <div className="p-8 text-center text-slate-500">Cargando mapa...</div>
+  if (errorCarga) return <div className="p-8 text-center text-slate-500">No se pudieron cargar los clientes.</div>
 
   return (
     <main className="min-h-screen bg-[#f7faff] pb-24 text-slate-900">

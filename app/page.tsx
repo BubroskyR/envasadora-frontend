@@ -1,9 +1,8 @@
 'use client'
 import Link from 'next/link'
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import {
   AlertTriangle,
-  Bell,
   ChevronRight,
   CircleDollarSign,
   Droplets,
@@ -14,18 +13,15 @@ import {
   X,
   Filter
 } from 'lucide-react'
+import { apiGet, apiSend } from '@/lib/api'
+import { useAjustes } from '@/lib/ajustes'
+import { bidonesUltimaEntregaPorCliente, calcularEstado, money, type Cliente, type EntregaBasica, type EstadoAgua } from '@/lib/clientes'
+import { parseFecha } from '@/lib/fechas'
 
-type CustomerStatus = 'fresh' | 'soon' | 'urgent'
+const FILTROS = ['Todos', 'Urgentes', 'Con Deuda', 'Al Día'] as const
+type Filtro = typeof FILTROS[number]
 
-interface Cliente {
-  id: number;
-  nombre: string;
-  direccion: string;
-  fecha_ultima_entrega: string | null;
-  consumo_semanal_estimado: number;
-  deuda_actual: string;
-  barrio?: string;
-}
+const FORM_VACIO = { nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1, barrio: '', latitud: '', longitud: '' }
 
 const statusStyles = {
   fresh: {
@@ -39,37 +35,20 @@ const statusStyles = {
   },
 }
 
-function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, onUpdate: () => void, precioBidon: number }) {
+function CustomerCard({ customer, estado, onUpdate, precioBidon }: { customer: Cliente, estado: EstadoAgua, onUpdate: () => void, precioBidon: number }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [cantidadBidones, setCantidadBidones] = useState(customer.consumo_semanal_estimado);
-  const [montoPagado, setMontoPagado] = useState(customer.consumo_semanal_estimado * precioBidon);
+  const [montoPagado, setMontoPagado] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    setMontoPagado(cantidadBidones * precioBidon);
-  }, [precioBidon, cantidadBidones]);
-
-  const calcularEstado = (fechaUltimaEntrega: string | null, consumoEstimado: number) => {
-    if (!fechaUltimaEntrega) return { level: 0, status: 'urgent' as CustomerStatus, statusLabel: 'Nunca entregado', detail: 'Falta entrega' };
-    
-    const fechaEntrega = new Date(fechaUltimaEntrega);
-    const fechaActual = new Date();
-    const diasPasados = Math.floor((fechaActual.getTime() - fechaEntrega.getTime()) / (1000 * 60 * 60 * 24));
-    
-    let level = 100 - ((diasPasados / consumoEstimado) * 100);
-    if (level < 0) level = 0;
-    if (level > 100) level = 100;
-
-    let status: CustomerStatus = 'fresh';
-    let statusLabel = 'Nivel óptimo';
-    if (level <= 20) { status = 'urgent'; statusLabel = 'Entrega urgente'; }
-    else if (level <= 50) { status = 'soon'; statusLabel = 'Próxima entrega'; }
-
-    const detail = diasPasados === 0 ? 'Entregado hoy' : `Hace ${diasPasados} días`;
-    return { level, status, statusLabel, detail };
+  // Cada vez que se abre el modal se parte de valores frescos (consumo estimado y precio actual),
+  // en vez de arrastrar lo que se cargó en la entrega anterior.
+  const abrirModal = () => {
+    setCantidadBidones(customer.consumo_semanal_estimado);
+    setMontoPagado(customer.consumo_semanal_estimado * precioBidon);
+    setIsModalOpen(true);
   };
 
-  const estado = calcularEstado(customer.fecha_ultima_entrega, customer.consumo_semanal_estimado);
   const styles = statusStyles[estado.status];
   const deudaNumerica = Number(customer.deuda_actual);
 
@@ -78,15 +57,11 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
     try {
       const montoTotal = cantidadBidones * precioBidon;
       
-      const response = await fetch('https://envasadora-mas.onrender.com/api/entregas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente_id: customer.id,
-          cantidad_bidones: cantidadBidones,
-          monto_total: montoTotal,
-          monto_pagado: montoPagado
-        })
+      const response = await apiSend('/entregas', 'POST', {
+        cliente_id: customer.id,
+        cantidad_bidones: cantidadBidones,
+        monto_total: montoTotal,
+        monto_pagado: montoPagado
       });
 
       if (response.ok) {
@@ -127,14 +102,14 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
         <div className="mt-5 rounded-2xl bg-slate-50/80 p-4">
           <div className="mb-3 flex items-center justify-between text-xs font-semibold">
             <span className={styles.label}>{estado.statusLabel}</span>
-            <span className="text-slate-500">{Math.round(estado.level)}% disponible</span>
+            <span className="text-slate-500">{Math.round(estado.level)}% · consume {customer.consumo_semanal_estimado}/sem</span>
           </div>
           <div className={`h-3 overflow-hidden rounded-full ${styles.track}`}>
             <div className={`h-full rounded-full transition-all duration-1000 ${styles.bar}`} style={{ width: `${estado.level}%` }} />
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
             <span>{estado.detail}</span>
-            <span>Consumo est.: {customer.consumo_semanal_estimado} bidones</span>
+            <span className={`font-semibold ${styles.label}`}>{estado.restante}</span>
           </div>
         </div>
 
@@ -143,17 +118,17 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
             <CircleDollarSign aria-hidden="true" className={deudaNumerica > 0 ? 'size-4 text-red-500' : 'size-4 text-slate-400'} />
             <span className="text-slate-500">Deuda:</span>
             <span className={`font-bold ${deudaNumerica > 0 ? 'text-red-600' : 'text-slate-600'}`}>
-              ${deudaNumerica.toLocaleString('es-AR')}
+              {money(deudaNumerica)}
             </span>
           </div>
           <span className="text-xs text-slate-400">
-            Última: {customer.fecha_ultima_entrega ? new Date(customer.fecha_ultima_entrega).toLocaleDateString('es-AR') : 'Nunca'}
+            Última: {customer.fecha_ultima_entrega ? parseFecha(customer.fecha_ultima_entrega).toLocaleDateString('es-AR') : 'Nunca'}
           </span>
         </div>
 
         <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
           <button 
-            onClick={() => setIsModalOpen(true)}
+            onClick={abrirModal}
             className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-sky-600 text-white font-semibold shadow-sm shadow-sky-600/20 hover:bg-sky-700 transition-colors"
           >
             <Truck className="size-5" />
@@ -182,6 +157,7 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
                   <Droplets className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-5" />
                   <input 
                     type="number" 
+                    min="1"
                     value={cantidadBidones}
                     onChange={(e) => {
                       const nuevaCantidad = Number(e.target.value);
@@ -199,18 +175,19 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
                   <input 
                     type="number" 
+                    min="0"
                     value={montoPagado}
                     onChange={(e) => setMontoPagado(Number(e.target.value))}
                     className="w-full pl-8 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Total de la venta: ${cantidadBidones * precioBidon}</p>
+                <p className="text-xs text-slate-500 mt-1">Total de la venta: {money(cantidadBidones * precioBidon)}</p>
               </div>
             </div>
 
             <button 
               onClick={handleRegistrarEntrega}
-              disabled={isSubmitting}
+              disabled={isSubmitting || cantidadBidones <= 0 || montoPagado < 0}
               className="w-full py-3.5 bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 disabled:opacity-50 transition-all flex justify-center items-center gap-2"
             >
               {isSubmitting ? 'Guardando...' : 'Confirmar Entrega'}
@@ -224,60 +201,50 @@ function CustomerCard({ customer, onUpdate, precioBidon }: { customer: Cliente, 
 
 export default function Page() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [entregas, setEntregas] = useState<EntregaBasica[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [precioBidon, setPrecioBidon] = useState(2000); 
-  const [barriosConfigurados, setBarriosConfigurados] = useState<string[]>([]);
+  const [errorCarga, setErrorCarga] = useState(false);
+  const { precioBidon, barrios: barriosConfigurados } = useAjustes();
   
   const [busqueda, setBusqueda] = useState('');
-  const [filtroActivo, setFiltroActivo] = useState('Todos'); 
+  const [filtroActivo, setFiltroActivo] = useState<Filtro>('Todos');
   const [barrioSeleccionado, setBarrioSeleccionado] = useState('Todos');
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-  const [addForm, setAddForm] = useState({
-    nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1, barrio: '', latitud: '', longitud: ''
-  });
+  const [addForm, setAddForm] = useState(FORM_VACIO);
 
-  const cargarClientes = () => {
-    fetch("https://envasadora-mas.onrender.com/api/clientes")
-      .then((respuesta) => respuesta.json())
-      .then((datos) => {
-        setClientes(datos);
-        setCargando(false);
+  const cargarClientes = useCallback(() => {
+    Promise.all([
+      apiGet<Cliente[]>('/clientes'),
+      // Las entregas solo afinan el nivel de agua: si fallan, se muestra igual la lista con una estimación semanal
+      apiGet<EntregaBasica[]>('/entregas').catch((error) => {
+        console.error("Error al cargar entregas:", error);
+        return [];
+      }),
+    ])
+      .then(([datosClientes, datosEntregas]) => {
+        setClientes(datosClientes);
+        setEntregas(datosEntregas);
+        setErrorCarga(false);
       })
       .catch((error) => {
         console.error("Error al cargar clientes:", error);
-        setCargando(false);
-      });
-  };
+        setErrorCarga(true);
+      })
+      .finally(() => setCargando(false));
+  }, []);
 
   useEffect(() => {
     cargarClientes();
-    const precioGuardado = localStorage.getItem('precioBidon');
-    if (precioGuardado) {
-      setPrecioBidon(Number(precioGuardado));
-    }
+  }, [cargarClientes]);
 
-    // Leemos los barrios configurados desde Ajustes
-    const barriosGuardados = localStorage.getItem('barriosRuta');
-    if (barriosGuardados) {
-      try {
-        const parsed = JSON.parse(barriosGuardados);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setBarriosConfigurados(parsed);
-          // Si el formulario nuevo está vacío, le asignamos el primer barrio por defecto para comodidad
-          setAddForm(prev => ({ ...prev, barrio: parsed[0] }));
-        }
-      } catch (e) {
-        setBarriosConfigurados(['Centro', 'Villa San Martín', 'Las Flores', 'San José']);
-        setAddForm(prev => ({ ...prev, barrio: 'Centro' }));
-      }
-    } else {
-      setBarriosConfigurados(['Centro', 'Villa San Martín', 'Las Flores', 'San José']);
-      setAddForm(prev => ({ ...prev, barrio: 'Centro' }));
-    }
-  }, []);
+  const abrirNuevoCliente = () => {
+    // El barrio por defecto es el primero configurado en Ajustes
+    setAddForm({ ...FORM_VACIO, barrio: barriosConfigurados[0] ?? '' });
+    setIsAddOpen(true);
+  };
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -301,19 +268,14 @@ export default function Page() {
 
   const handleCrearCliente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addForm.nombre) { alert("El nombre es obligatorio"); return; }
+    if (!addForm.nombre.trim()) { alert("El nombre es obligatorio"); return; }
 
     setIsSubmittingNew(true);
     try {
-      const response = await fetch('https://envasadora-mas.onrender.com/api/clientes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addForm)
-      });
+      const response = await apiSend('/clientes', 'POST', addForm);
 
       if (response.ok) {
         setIsAddOpen(false);
-        setAddForm({ nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1, barrio: barriosConfigurados[0] || '', latitud: '', longitud: '' });
         cargarClientes();
       } else {
         alert("Error al crear el cliente");
@@ -326,32 +288,48 @@ export default function Page() {
     }
   };
 
+  // Nivel de agua de cada cliente, calculado una sola vez por carga
+  const clientesConEstado = useMemo(() => {
+    const bidones = bidonesUltimaEntregaPorCliente(entregas);
+    const ahora = new Date();
+    return clientes.map(cliente => ({
+      cliente,
+      estado: calcularEstado(cliente, bidones.get(cliente.id), ahora),
+    }));
+  }, [clientes, entregas]);
+
   const clientesFiltrados = useMemo(() => {
-    return clientes.filter(cliente => {
-      const matchesSearch = cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (cliente.barrio && cliente.barrio.toLowerCase().includes(busqueda.toLowerCase())) ||
-        cliente.direccion.toLowerCase().includes(busqueda.toLowerCase());
+    const texto = busqueda.toLowerCase().trim();
+    const barrioBuscado = barrioSeleccionado.toLowerCase().trim();
 
-      const deudaNumerica = Number(cliente.deuda_actual);
-      
-      const fechaEntrega = cliente.fecha_ultima_entrega ? new Date(cliente.fecha_ultima_entrega) : null;
-      const diasPasados = fechaEntrega ? Math.floor((new Date().getTime() - fechaEntrega.getTime()) / (1000 * 60 * 60 * 24)) : 999;
-      const level = !cliente.fecha_ultima_entrega ? 0 : 100 - ((diasPasados / cliente.consumo_semanal_estimado) * 100);
-      const esUrgente = level <= 20 || !cliente.fecha_ultima_entrega;
+    return clientesConEstado
+      .filter(({ cliente, estado }) => {
+        const matchesSearch = !texto ||
+          cliente.nombre.toLowerCase().includes(texto) ||
+          (cliente.barrio?.toLowerCase().includes(texto) ?? false) ||
+          cliente.direccion.toLowerCase().includes(texto);
+        if (!matchesSearch) return false;
 
-      const matchesFilter = 
-        filtroActivo === 'Todos' ||
-        (filtroActivo === 'Urgentes' && esUrgente) ||
-        (filtroActivo === 'Con Deuda' && deudaNumerica > 0) ||
-        (filtroActivo === 'Al Día' && deudaNumerica === 0);
+        const matchesBarrio =
+          barrioSeleccionado === 'Todos' ||
+          cliente.barrio?.toLowerCase().trim() === barrioBuscado;
+        if (!matchesBarrio) return false;
 
-      const matchesBarrio = 
-        barrioSeleccionado === 'Todos' || 
-        (cliente.barrio && cliente.barrio.toLowerCase().trim() === barrioSeleccionado.toLowerCase().trim());
-
-      return matchesSearch && matchesFilter && matchesBarrio;
-    });
-  }, [clientes, busqueda, filtroActivo, barrioSeleccionado]);
+        const deudaNumerica = Number(cliente.deuda_actual);
+        switch (filtroActivo) {
+          case 'Urgentes':
+            return estado.status === 'urgent';
+          case 'Con Deuda':
+            return deudaNumerica > 0;
+          case 'Al Día':
+            return deudaNumerica <= 0;
+          default:
+            return true;
+        }
+      })
+      // Los que tienen menos agua primero, para saber a quién visitar sin tener que recordarlo
+      .sort((a, b) => a.estado.level - b.estado.level || a.estado.diasRestantes - b.estado.diasRestantes);
+  }, [clientesConEstado, busqueda, filtroActivo, barrioSeleccionado]);
 
   return (
     <main className="min-h-screen bg-[#f7faff] text-slate-900 pb-20 relative">
@@ -404,7 +382,7 @@ export default function Page() {
 
           {/* FILTROS RÁPIDOS */}
           <div className="flex gap-2 overflow-x-auto pb-0.5">
-            {['Todos', 'Urgentes', 'Con Deuda', 'Al Día'].map((option) => (
+            {FILTROS.map((option) => (
               <button 
                 key={option} 
                 onClick={() => setFiltroActivo(option)} 
@@ -432,14 +410,22 @@ export default function Page() {
 
         {cargando ? (
           <p className="text-center text-slate-500 mt-10">Cargando clientes...</p>
+        ) : errorCarga ? (
+          <div className="text-center mt-10">
+            <p className="text-slate-500">No se pudieron cargar los clientes.</p>
+            <button onClick={cargarClientes} className="mt-3 rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white hover:bg-sky-700">
+              Reintentar
+            </button>
+          </div>
         ) : (
           <div className="flex flex-col gap-4 mt-8">
             {clientesFiltrados.length === 0 ? (
               <p className="text-center text-slate-500 mt-10">No se encontraron clientes.</p>
             ) : (
-              clientesFiltrados.map((cliente) => (
+              clientesFiltrados.map(({ cliente, estado }) => (
                 <CustomerCard 
                   customer={cliente} 
+                  estado={estado}
                   key={cliente.id} 
                   precioBidon={precioBidon}
                   onUpdate={cargarClientes} 
@@ -452,7 +438,7 @@ export default function Page() {
 
       <div className="fixed bottom-24 right-5 sm:right-auto sm:left-1/2 sm:ml-[300px] z-30">
         <button 
-          onClick={() => setIsAddOpen(true)}
+          onClick={abrirNuevoCliente}
           className="flex size-14 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-600/30 transition-transform hover:scale-105 active:scale-95"
           aria-label="Agregar nuevo cliente"
         >

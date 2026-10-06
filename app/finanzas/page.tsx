@@ -1,88 +1,115 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Fuel,
   Menu,
-  MoreHorizontal,
   ReceiptText,
   Users,
   Wallet,
   X
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, ResponsiveContainer } from 'recharts'
+import { apiGet, apiSend } from '@/lib/api'
+import { money, type Cliente } from '@/lib/clientes'
+import { parseFecha } from '@/lib/fechas'
 
-const money = (value: number) => `$${value.toLocaleString('es-AR')}`
+interface Gasto {
+  id: number;
+  categoria?: string;
+  descripcion?: string;
+  monto: string;
+  fecha?: string;
+}
+
+interface EntregaResumen {
+  id: number;
+  fecha?: string;
+  monto_pagado: string;
+  cliente_nombre?: string;
+}
+
+interface Pago {
+  id: number;
+  fecha?: string;
+  fecha_pago?: string;
+  monto: string;
+  cliente_nombre?: string;
+}
+
+// Los movimientos sin fecha se muestran primero como "Reciente"
+const timestampDe = (fecha?: string) => (fecha ? parseFecha(fecha).getTime() : Infinity)
 
 export default function Page() {
-  const [clientes, setClientes] = useState<any[]>([])
-  const [gastos, setGastos] = useState<any[]>([])
-  const [entregas, setEntregas] = useState<any[]>([])
-  const [pagos, setPagos] = useState<any[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [gastos, setGastos] = useState<Gasto[]>([])
+  const [entregas, setEntregas] = useState<EntregaResumen[]>([])
+  const [pagos, setPagos] = useState<Pago[]>([])
   
   const [isLoading, setIsLoading] = useState(true)
+  const [errorCarga, setErrorCarga] = useState(false)
 
   // Estados para el Modal de Gastos actualizados
   const [isGastoOpen, setIsGastoOpen] = useState(false)
   const [gastoForm, setGastoForm] = useState({ categoria: '', monto: '', comentario: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const cargarDatos = () => {
+  const cargarDatos = useCallback(() => {
     Promise.all([
-      fetch('https://envasadora-mas.onrender.com/api/clientes').then(res => res.json()),
-      fetch('https://envasadora-mas.onrender.com/api/gastos').then(res => res.json()),
-      fetch('https://envasadora-mas.onrender.com/api/entregas').then(res => res.json()),
-      fetch('https://envasadora-mas.onrender.com/api/pagos').then(res => res.json())
+      apiGet<Cliente[]>('/clientes'),
+      apiGet<Gasto[]>('/gastos'),
+      apiGet<EntregaResumen[]>('/entregas'),
+      apiGet<Pago[]>('/pagos')
     ]).then(([clientesData, gastosData, entregasData, pagosData]) => {
       setClientes(clientesData)
       setGastos(gastosData)
       setEntregas(entregasData)
       setPagos(pagosData)
-      setIsLoading(false)
+      setErrorCarga(false)
     }).catch(err => {
       console.error("Error cargando dashboard:", err)
-      setIsLoading(false)
-    })
-  }
+      setErrorCarga(true)
+    }).finally(() => setIsLoading(false))
+  }, [])
 
   useEffect(() => {
     cargarDatos()
-  }, [])
+  }, [cargarDatos])
 
   const handleRegistrarGasto = async () => {
     setIsSubmitting(true)
     try {
-      const response = await fetch('https://envasadora-mas.onrender.com/api/gastos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categoria: gastoForm.categoria,
-          monto: Number(gastoForm.monto),
-          descripcion: gastoForm.comentario // Enviamos el comentario como descripción
-        })
+      const response = await apiSend('/gastos', 'POST', {
+        categoria: gastoForm.categoria,
+        monto: Number(gastoForm.monto),
+        descripcion: gastoForm.comentario // Enviamos el comentario como descripción
       });
       if (response.ok) {
         setIsGastoOpen(false)
         setGastoForm({ categoria: '', monto: '', comentario: '' })
         cargarDatos()
+      } else {
+        alert("Error al registrar el gasto")
       }
     } catch (error) {
-      alert("Error al registrar el gasto")
+      console.error("Error:", error)
+      alert("Error de conexión")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   // --- CÁLCULOS MATEMÁTICOS DEL MES ---
-  const currentMonth = new Date().getMonth()
-  const currentYear = new Date().getFullYear()
+  const hoy = new Date()
+  const currentMonth = hoy.getMonth()
+  const currentYear = hoy.getFullYear()
 
-  const isCurrentMonth = (dateString: string) => {
+  const isCurrentMonth = (dateString?: string) => {
     if (!dateString) return true;
-    const d = new Date(dateString)
-    return d.getUTCMonth() === currentMonth && d.getUTCFullYear() === currentYear
+    const d = parseFecha(dateString)
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear
   }
 
   const clientesActivos = clientes.length
@@ -99,35 +126,34 @@ export default function Page() {
 
   // --- LÓGICA DEL GRÁFICO (Últimos 6 meses) ---
   const chartData = (() => {
-    const months: any = {};
+    const months: Record<string, { month: string; income: number }> = {};
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
+      // Se usa el día 1 para que restar meses no se desborde (ej. 31 de marzo - 1 mes = 3 de marzo)
+      const d = new Date(currentYear, currentMonth - i, 1);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       const name = d.toLocaleDateString('es-AR', { month: 'short' });
       months[key] = { month: name.charAt(0).toUpperCase() + name.slice(1), income: 0 };
     }
 
-    const addIncome = (items: any[], amountKey: string, dateKey: string = 'fecha') => {
-      items.forEach(item => {
-        if(!item[dateKey]) return;
-        const d = new Date(item[dateKey]);
-        const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
-        if (months[key]) {
-          months[key].income += Number(item[amountKey] || 0);
-        }
-      });
+    const addIncome = (fecha: string | undefined, monto: string) => {
+      if (!fecha) return;
+      const d = parseFecha(fecha);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (months[key]) {
+        months[key].income += Number(monto || 0);
+      }
     };
 
-    addIncome(entregas, 'monto_pagado');
-    addIncome(pagos, 'monto');
+    entregas.forEach(e => addIncome(e.fecha, e.monto_pagado));
+    // Antes los pagos solo se sumaban si tenían 'fecha'; ahora también se usa 'fecha_pago' como en el resto de la pantalla
+    pagos.forEach(p => addIncome(p.fecha || p.fecha_pago, p.monto));
     return Object.values(months);
   })();
 
   // --- LÓGICA DE MOVIMIENTOS RECIENTES ---
-  const formatDate = (fechaStr: string) => {
+  const formatDate = (fechaStr?: string) => {
     if (!fechaStr) return 'Reciente'
-    return new Date(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+    return parseFecha(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
   }
 
   const movimientos = [
@@ -138,10 +164,10 @@ export default function Page() {
       concept: `Gasto · ${g.categoria || 'Varios'}${g.descripcion ? ` (${g.descripcion})` : ''}`, 
       amount: Number(g.monto), 
       type: 'expense', 
-      timestamp: new Date(g.fecha || Date.now()).getTime() 
+      timestamp: timestampDe(g.fecha)
     })),
-    ...entregas.filter(e => Number(e.monto_pagado) > 0).map(e => ({ id: `e-${e.id}`, date: formatDate(e.fecha), concept: `Venta · ${e.cliente_nombre || 'Cliente'}`, amount: Number(e.monto_pagado), type: 'income', timestamp: new Date(e.fecha || Date.now()).getTime() })),
-    ...pagos.map(p => ({ id: `p-${p.id}`, date: formatDate(p.fecha || p.fecha_pago), concept: `Cobro deuda · ${p.cliente_nombre || 'Cliente'}`, amount: Number(p.monto), type: 'income', timestamp: new Date(p.fecha || p.fecha_pago || Date.now()).getTime() }))
+    ...entregas.filter(e => Number(e.monto_pagado) > 0).map(e => ({ id: `e-${e.id}`, date: formatDate(e.fecha), concept: `Venta · ${e.cliente_nombre || 'Cliente'}`, amount: Number(e.monto_pagado), type: 'income', timestamp: timestampDe(e.fecha) })),
+    ...pagos.map(p => ({ id: `p-${p.id}`, date: formatDate(p.fecha || p.fecha_pago), concept: `Cobro deuda · ${p.cliente_nombre || 'Cliente'}`, amount: Number(p.monto), type: 'income', timestamp: timestampDe(p.fecha || p.fecha_pago) }))
   ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10)
 
   const metrics = [
@@ -153,6 +179,10 @@ export default function Page() {
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500 bg-[#f7faff]">Calculando finanzas...</div>
+  }
+
+  if (errorCarga) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500 bg-[#f7faff]">No se pudieron cargar las finanzas.</div>
   }
 
   return (

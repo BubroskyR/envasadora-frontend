@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useCallback, useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Banknote,
@@ -14,6 +15,10 @@ import {
   X,
   Trash2
 } from 'lucide-react'
+import { apiGet, apiSend } from '@/lib/api'
+import { useAjustes } from '@/lib/ajustes'
+import { money, type Cliente } from '@/lib/clientes'
+import { parseFecha } from '@/lib/fechas'
 
 interface Entrega {
   id: number;
@@ -24,24 +29,13 @@ interface Entrega {
   monto_adeudado: string;
 }
 
-interface Cliente {
-  id: number;
-  nombre: string;
-  direccion: string;
-  telefono: string;
-  consumo_semanal_estimado: number;
-  deuda_actual: string;
-  barrio?: string;
-  latitud?: string;
-  longitud?: string;
-}
-
-const money = (value: number) => `$${value.toLocaleString('es-AR')}`
-
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  const { barrios: barriosConfigurados } = useAjustes();
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
+  const [errorCarga, setErrorCarga] = useState(false);
   const [entregas, setEntregas] = useState<Entrega[]>([]);
   
   const [isPagarOpen, setIsPagarOpen] = useState(false);
@@ -65,11 +59,11 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     longitud: ''
   });
 
-  const cargarDatos = () => {
-    fetch(`https://envasadora-mas.onrender.com/api/clientes/${id}`)
-      .then(res => res.json())
+  const cargarDatos = useCallback(() => {
+    apiGet<Cliente>(`/clientes/${id}`)
       .then(data => {
         setCliente(data);
+        setErrorCarga(false);
         const deuda = Number(data.deuda_actual);
         setMontoPago(deuda > 0 ? deuda : '');
         
@@ -83,31 +77,29 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           longitud: data.longitud || ''
         });
       })
-      .catch(err => console.error("Error al cargar cliente:", err));
+      .catch(err => {
+        console.error("Error al cargar cliente:", err);
+        setErrorCarga(true);
+      });
 
-    fetch(`https://envasadora-mas.onrender.com/api/clientes/${id}/entregas`)
-      .then(res => res.json())
+    apiGet<Entrega[]>(`/clientes/${id}/entregas`)
       .then(data => setEntregas(data))
       .catch(err => console.error("Error al cargar historial:", err));
-  };
+  }, [id]);
 
   useEffect(() => {
     cargarDatos();
-  }, [id]);
+  }, [cargarDatos]);
 
   const handleRegistrarPago = async () => {
     if (montoPago === '' || montoPago <= 0) return;
     
     setIsSubmittingPago(true);
     try {
-      const response = await fetch('https://envasadora-mas.onrender.com/api/pagos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente_id: cliente?.id,
-          monto_pago: Number(montoPago),
-          metodo_pago: 'Efectivo'
-        })
+      const response = await apiSend('/pagos', 'POST', {
+        cliente_id: cliente?.id,
+        monto_pago: Number(montoPago),
+        metodo_pago: 'Efectivo'
       });
 
       if (response.ok) {
@@ -125,13 +117,11 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   };
 
   const handleGuardarEdicion = async () => {
+    if (!editForm.nombre.trim()) { alert("El nombre es obligatorio"); return; }
+
     setIsSubmittingEdit(true);
     try {
-      const response = await fetch(`https://envasadora-mas.onrender.com/api/clientes/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
-      });
+      const response = await apiSend(`/clientes/${id}`, 'PUT', editForm);
 
       if (response.ok) {
         setIsEditOpen(false);
@@ -155,22 +145,19 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`https://envasadora-mas.onrender.com/api/clientes/${id}`, {
-        method: 'DELETE',
-      });
+      const response = await apiSend(`/clientes/${id}`, 'DELETE');
 
       if (response.ok) {
-        // Redirigir a la pantalla principal después de eliminar
-        window.location.href = '/';
-      } else {
-        alert("Error al eliminar el cliente");
+        // Navegación del lado del cliente, sin recargar toda la app
+        router.replace('/');
+        return;
       }
+      alert("Error al eliminar el cliente");
     } catch (error) {
       console.error("Error:", error);
       alert("Error de conexión");
-    } finally {
-      setIsDeleting(false);
     }
+    setIsDeleting(false);
   };
 
   const handleGetLocation = () => {
@@ -199,7 +186,11 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   };
 
   if (!cliente) {
-    return <div className="p-8 text-center text-slate-500">Cargando perfil...</div>;
+    return (
+      <div className="p-8 text-center text-slate-500">
+        {errorCarga ? 'No se pudo cargar el perfil del cliente.' : 'Cargando perfil...'}
+      </div>
+    );
   }
 
   const deudaNumerica = Number(cliente.deuda_actual);
@@ -216,7 +207,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-4 sm:px-8 sm:py-5">
           <button
             aria-label="Volver atrás"
-            onClick={() => window.history.back()}
+            onClick={() => router.back()}
             className="flex size-10 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
           >
             <ArrowLeft aria-hidden="true" className="size-5" />
@@ -382,7 +373,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                         <Droplets aria-hidden="true" className="size-3.5" />
                       </span>
                       <span className="font-bold text-slate-800">
-                        {new Date(entrega.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                        {parseFecha(entrega.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
                       </span>
                     </div>
                     <span className="text-slate-500">{entrega.cantidad_bidones} bidones</span>
@@ -436,13 +427,17 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Barrio</label>
-                <input 
-                  type="text" 
+                <select
                   value={editForm.barrio}
                   onChange={(e) => setEditForm({...editForm, barrio: e.target.value})}
-                  placeholder="Ej. Centro"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
-                />
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all font-semibold text-sm cursor-pointer"
+                >
+                  <option value="">Sin barrio</option>
+                  {/* Se incluye el barrio actual aunque ya no esté en Ajustes, para no perderlo al guardar */}
+                  {Array.from(new Set([...barriosConfigurados, ...(editForm.barrio ? [editForm.barrio] : [])])).map((barrio) => (
+                    <option key={barrio} value={barrio}>{barrio}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Teléfono</label>
@@ -457,6 +452,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Consumo Semanal (Bidones)</label>
                 <input 
                   type="number" 
+                  min="1"
                   value={editForm.consumo_semanal_estimado}
                   onChange={(e) => setEditForm({...editForm, consumo_semanal_estimado: Number(e.target.value)})}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
