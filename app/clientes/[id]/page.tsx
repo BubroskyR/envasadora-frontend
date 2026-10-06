@@ -15,6 +15,7 @@ import {
   X,
   Trash2
 } from 'lucide-react'
+import { CampoNumero } from '@/components/CampoNumero'
 import { apiGet, apiSend } from '@/lib/api'
 import { useAjustes } from '@/lib/ajustes'
 import { money, type Cliente } from '@/lib/clientes'
@@ -49,7 +50,15 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    nombre: string;
+    direccion: string;
+    telefono: string;
+    consumo_semanal_estimado: number | '';
+    barrio: string;
+    latitud: string;
+    longitud: string;
+  }>({
     nombre: '',
     direccion: '',
     telefono: '',
@@ -121,7 +130,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
     setIsSubmittingEdit(true);
     try {
-      const response = await apiSend(`/clientes/${id}`, 'PUT', editForm);
+      // Si el consumo quedó vacío o en 0, se guarda 1 bidón por semana
+      const response = await apiSend(`/clientes/${id}`, 'PUT', { ...editForm, consumo_semanal_estimado: editForm.consumo_semanal_estimado || 1 });
 
       if (response.ok) {
         setIsEditOpen(false);
@@ -291,13 +301,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <span className="text-sm font-bold text-slate-700">¿Cuánto te pagó?</span>
                 <div className="flex-1 relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
-                  <input 
-                    type="number" 
+                  <CampoNumero
+                    aria-label="Monto pagado"
                     value={montoPago}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setMontoPago(val === '' ? '' : Number(val));
-                    }}
+                    onValueChange={setMontoPago}
                     className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 font-bold focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
@@ -450,11 +457,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Consumo Semanal (Bidones)</label>
-                <input 
-                  type="number" 
-                  min="1"
+                <CampoNumero
                   value={editForm.consumo_semanal_estimado}
-                  onChange={(e) => setEditForm({...editForm, consumo_semanal_estimado: Number(e.target.value)})}
+                  onValueChange={(valor) => setEditForm({...editForm, consumo_semanal_estimado: valor})}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
                 />
               </div>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Save, Settings, DollarSign, MapPin, Plus, X, LogOut } from 'lucide-react'
+import { CampoNumero } from '@/components/CampoNumero'
 import { guardarAjustes, useAjustes } from '@/lib/ajustes'
 import { cerrarSesion } from '@/lib/api'
 
@@ -68,14 +69,10 @@ export default function AjustesPage() {
             </label>
             <div className="relative">
               <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 size-5" />
-              <input 
-                type="number" 
-                min="1"
+              <CampoNumero
+                aria-label="Precio global del bidón"
                 value={precio}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setPrecioDraft(val === '' ? '' : Number(val));
-                }}
+                onValueChange={setPrecioDraft}
                 className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all font-bold text-lg"
                 placeholder="Ej. 2000"
               />

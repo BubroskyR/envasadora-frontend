@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, ResponsiveContainer } from 'recharts'
+import { CampoNumero } from '@/components/CampoNumero'
 import { apiGet, apiSend } from '@/lib/api'
 import { money } from '@/lib/clientes'
 import { parseFecha } from '@/lib/fechas'
@@ -51,7 +52,7 @@ export default function Page() {
 
   // Estados para el Modal de Gastos actualizados
   const [isGastoOpen, setIsGastoOpen] = useState(false)
-  const [gastoForm, setGastoForm] = useState({ categoria: '', monto: '', comentario: '' })
+  const [gastoForm, setGastoForm] = useState<{ categoria: string; monto: number | ''; comentario: string }>({ categoria: '', monto: '', comentario: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const cargarDatos = useCallback(() => {
@@ -261,10 +262,10 @@ export default function Page() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Monto del gasto</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
-                  <input 
-                    type="number" 
+                  <CampoNumero
+                    aria-label="Monto del gasto"
                     value={gastoForm.monto}
-                    onChange={(e) => setGastoForm({...gastoForm, monto: e.target.value})}
+                    onValueChange={(valor) => setGastoForm({...gastoForm, monto: valor})}
                     className="w-full pl-8 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none font-bold"
                   />
                 </div>
