@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Settings, DollarSign, MapPin, Plus, X } from 'lucide-react'
+import { Save, Settings, DollarSign, MapPin, Plus, X, LogOut } from 'lucide-react'
 import { guardarAjustes, useAjustes } from '@/lib/ajustes'
+import { cerrarSesion } from '@/lib/api'
 
 export default function AjustesPage() {
   const ajustes = useAjustes()
@@ -148,6 +149,14 @@ export default function AjustesPage() {
         >
           <Save className="size-5" />
           {guardado ? '¡Configuración Guardada!' : 'Guardar Cambios'}
+        </button>
+
+        <button
+          onClick={cerrarSesion}
+          className="w-full py-3.5 font-bold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all flex justify-center items-center gap-2"
+        >
+          <LogOut className="size-5" />
+          Cerrar sesión
         </button>
       </div>
     </main>

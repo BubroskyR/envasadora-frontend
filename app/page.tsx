@@ -219,7 +219,7 @@ export default function Page() {
     Promise.all([
       apiGet<Cliente[]>('/clientes'),
       // Las entregas solo afinan el nivel de agua: si fallan, se muestra igual la lista con una estimación semanal
-      apiGet<EntregaBasica[]>('/entregas').catch((error) => {
+      apiGet<EntregaBasica[]>('/entregas/ultimas').catch((error) => {
         console.error("Error al cargar entregas:", error);
         return [];
       }),

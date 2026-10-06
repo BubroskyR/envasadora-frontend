@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { BottomNavigation } from '@/components/BottomNavigation'
+import { AuthGate } from '@/components/AuthGate'
 
 export const metadata: Metadata = {
   title: 'Envasadora Aguas Mas',
@@ -25,14 +25,8 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
-        {/* Envolvemos el contenido principal con un padding inferior (pb-20 o pb-24) 
-            para que la barra fija no tape el contenido del final de tus páginas */}
-        <div className="pb-24">
-          {children}
-        </div>
-        
-        {/* Aquí renderizamos la barra de navegación en toda la app */}
-        <BottomNavigation />
+        {/* AuthGate pide iniciar sesión y, ya dentro, muestra el contenido con la barra de navegación */}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   )

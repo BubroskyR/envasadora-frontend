@@ -20,7 +20,7 @@ export default function RutasPage() {
     Promise.all([
       apiGet<Cliente[]>('/clientes'),
       // Si las entregas fallan, el mapa se muestra igual con una estimación semanal
-      apiGet<EntregaBasica[]>('/entregas').catch(() => [])
+      apiGet<EntregaBasica[]>('/entregas/ultimas').catch(() => [])
     ])
       .then(([datosClientes, datosEntregas]) => {
         setClientes(datosClientes)

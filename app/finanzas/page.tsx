@@ -13,41 +13,39 @@ import {
 } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, ResponsiveContainer } from 'recharts'
 import { apiGet, apiSend } from '@/lib/api'
-import { money, type Cliente } from '@/lib/clientes'
+import { money } from '@/lib/clientes'
 import { parseFecha } from '@/lib/fechas'
 
-interface Gasto {
-  id: number;
-  categoria?: string;
-  descripcion?: string;
+// Lo calcula el backend en /finanzas/resumen (los montos llegan como texto, igual que el resto de la API)
+interface Movimiento {
+  id: string;
+  tipo: 'gasto' | 'venta' | 'cobro';
+  fecha: string;
   monto: string;
-  fecha?: string;
+  categoria: string | null;
+  descripcion: string | null;
+  cliente_nombre: string | null;
 }
 
-interface EntregaResumen {
-  id: number;
-  fecha?: string;
-  monto_pagado: string;
-  cliente_nombre?: string;
+interface ResumenFinanzas {
+  clientes_activos: number;
+  clientes_con_deuda: number;
+  dinero_en_la_calle: string;
+  gastos_del_mes: string;
+  ingresos_del_mes: string;
+  grafico: { mes: string; ingresos: string }[];
+  movimientos: Movimiento[];
 }
 
-interface Pago {
-  id: number;
-  fecha?: string;
-  fecha_pago?: string;
-  monto: string;
-  cliente_nombre?: string;
+const conceptoDe = (m: Movimiento) => {
+  if (m.tipo === 'gasto') return `Gasto · ${m.categoria || 'Varios'}${m.descripcion ? ` (${m.descripcion})` : ''}`
+  if (m.tipo === 'venta') return `Venta · ${m.cliente_nombre || 'Cliente'}`
+  return `Cobro deuda · ${m.cliente_nombre || 'Cliente'}`
 }
-
-// Los movimientos sin fecha se muestran primero como "Reciente"
-const timestampDe = (fecha?: string) => (fecha ? parseFecha(fecha).getTime() : Infinity)
 
 export default function Page() {
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [gastos, setGastos] = useState<Gasto[]>([])
-  const [entregas, setEntregas] = useState<EntregaResumen[]>([])
-  const [pagos, setPagos] = useState<Pago[]>([])
-  
+  const [resumen, setResumen] = useState<ResumenFinanzas | null>(null)
+
   const [isLoading, setIsLoading] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
 
@@ -57,16 +55,10 @@ export default function Page() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const cargarDatos = useCallback(() => {
-    Promise.all([
-      apiGet<Cliente[]>('/clientes'),
-      apiGet<Gasto[]>('/gastos'),
-      apiGet<EntregaResumen[]>('/entregas'),
-      apiGet<Pago[]>('/pagos')
-    ]).then(([clientesData, gastosData, entregasData, pagosData]) => {
-      setClientes(clientesData)
-      setGastos(gastosData)
-      setEntregas(entregasData)
-      setPagos(pagosData)
+    // Antes se descargaban todos los clientes, gastos, entregas y pagos para sumarlos acá;
+    // ahora el backend devuelve solo los totales, el gráfico y los últimos movimientos.
+    apiGet<ResumenFinanzas>('/finanzas/resumen').then((data) => {
+      setResumen(data)
       setErrorCarga(false)
     }).catch(err => {
       console.error("Error cargando dashboard:", err)
@@ -101,89 +93,35 @@ export default function Page() {
     }
   }
 
-  // --- CÁLCULOS MATEMÁTICOS DEL MES ---
-  const hoy = new Date()
-  const currentMonth = hoy.getMonth()
-  const currentYear = hoy.getFullYear()
-
-  const isCurrentMonth = (dateString?: string) => {
-    if (!dateString) return true;
-    const d = parseFecha(dateString)
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear
-  }
-
-  const clientesActivos = clientes.length
-  const dineroEnLaCalle = clientes.reduce((acc, c) => acc + Number(c.deuda_actual || 0), 0)
-  const clientesConDeuda = clientes.filter(c => Number(c.deuda_actual) > 0).length
-
-  const gastosDelMes = gastos
-    .filter(g => isCurrentMonth(g.fecha))
-    .reduce((acc, g) => acc + Number(g.monto || 0), 0)
-
-  const ingresosDelMes = 
-    entregas.filter(e => isCurrentMonth(e.fecha)).reduce((acc, e) => acc + Number(e.monto_pagado || 0), 0) +
-    pagos.filter(p => isCurrentMonth(p.fecha || p.fecha_pago)).reduce((acc, p) => acc + Number(p.monto || 0), 0)
-
-  // --- LÓGICA DEL GRÁFICO (Últimos 6 meses) ---
-  const chartData = (() => {
-    const months: Record<string, { month: string; income: number }> = {};
-    for (let i = 5; i >= 0; i--) {
-      // Se usa el día 1 para que restar meses no se desborde (ej. 31 de marzo - 1 mes = 3 de marzo)
-      const d = new Date(currentYear, currentMonth - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const name = d.toLocaleDateString('es-AR', { month: 'short' });
-      months[key] = { month: name.charAt(0).toUpperCase() + name.slice(1), income: 0 };
-    }
-
-    const addIncome = (fecha: string | undefined, monto: string) => {
-      if (!fecha) return;
-      const d = parseFecha(fecha);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (months[key]) {
-        months[key].income += Number(monto || 0);
-      }
-    };
-
-    entregas.forEach(e => addIncome(e.fecha, e.monto_pagado));
-    // Antes los pagos solo se sumaban si tenían 'fecha'; ahora también se usa 'fecha_pago' como en el resto de la pantalla
-    pagos.forEach(p => addIncome(p.fecha || p.fecha_pago, p.monto));
-    return Object.values(months);
-  })();
-
-  // --- LÓGICA DE MOVIMIENTOS RECIENTES ---
-  const formatDate = (fechaStr?: string) => {
-    if (!fechaStr) return 'Reciente'
-    return parseFecha(fechaStr).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
-  }
-
-  const movimientos = [
-    ...gastos.map(g => ({ 
-      id: `g-${g.id}`, 
-      date: formatDate(g.fecha), 
-      // Se actualiza para mostrar la categoría y el comentario si existe
-      concept: `Gasto · ${g.categoria || 'Varios'}${g.descripcion ? ` (${g.descripcion})` : ''}`, 
-      amount: Number(g.monto), 
-      type: 'expense', 
-      timestamp: timestampDe(g.fecha)
-    })),
-    ...entregas.filter(e => Number(e.monto_pagado) > 0).map(e => ({ id: `e-${e.id}`, date: formatDate(e.fecha), concept: `Venta · ${e.cliente_nombre || 'Cliente'}`, amount: Number(e.monto_pagado), type: 'income', timestamp: timestampDe(e.fecha) })),
-    ...pagos.map(p => ({ id: `p-${p.id}`, date: formatDate(p.fecha || p.fecha_pago), concept: `Cobro deuda · ${p.cliente_nombre || 'Cliente'}`, amount: Number(p.monto), type: 'income', timestamp: timestampDe(p.fecha || p.fecha_pago) }))
-  ].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10)
-
-  const metrics = [
-    { label: 'Dinero en la calle', value: money(dineroEnLaCalle), detail: `${clientesConDeuda} cuentas pendientes`, icon: Wallet, tone: 'border-orange-100 bg-orange-50 text-orange-600', valueTone: 'text-orange-600' },
-    { label: 'Ingresos del mes', value: money(ingresosDelMes), detail: 'Suma de ventas y abonos', icon: ArrowDownLeft, tone: 'border-emerald-100 bg-emerald-50 text-emerald-600', valueTone: 'text-emerald-600' },
-    { label: 'Gastos del mes', value: money(gastosDelMes), detail: 'Operativos e insumos', icon: Fuel, tone: 'border-slate-200 bg-slate-50 text-slate-600', valueTone: 'text-slate-900' },
-    { label: 'Clientes activos', value: clientesActivos.toString(), detail: 'En tu base de datos', icon: Users, tone: 'border-sky-100 bg-sky-50 text-sky-600', valueTone: 'text-slate-900' },
-  ]
-
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500 bg-[#f7faff]">Calculando finanzas...</div>
   }
 
-  if (errorCarga) {
+  if (errorCarga || !resumen) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500 bg-[#f7faff]">No se pudieron cargar las finanzas.</div>
   }
+
+  // --- GRÁFICO (Últimos 6 meses, ya agrupados por el backend) ---
+  const chartData = resumen.grafico.map(({ mes, ingresos }) => {
+    const name = parseFecha(mes).toLocaleDateString('es-AR', { month: 'short' })
+    return { month: name.charAt(0).toUpperCase() + name.slice(1), income: Number(ingresos) }
+  })
+
+  // --- MOVIMIENTOS RECIENTES ---
+  const movimientos = resumen.movimientos.map(m => ({
+    id: m.id,
+    date: parseFecha(m.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }),
+    concept: conceptoDe(m),
+    amount: Number(m.monto),
+    type: m.tipo === 'gasto' ? 'expense' : 'income',
+  }))
+
+  const metrics = [
+    { label: 'Dinero en la calle', value: money(Number(resumen.dinero_en_la_calle)), detail: `${resumen.clientes_con_deuda} cuentas pendientes`, icon: Wallet, tone: 'border-orange-100 bg-orange-50 text-orange-600', valueTone: 'text-orange-600' },
+    { label: 'Ingresos del mes', value: money(Number(resumen.ingresos_del_mes)), detail: 'Suma de ventas y abonos', icon: ArrowDownLeft, tone: 'border-emerald-100 bg-emerald-50 text-emerald-600', valueTone: 'text-emerald-600' },
+    { label: 'Gastos del mes', value: money(Number(resumen.gastos_del_mes)), detail: 'Operativos e insumos', icon: Fuel, tone: 'border-slate-200 bg-slate-50 text-slate-600', valueTone: 'text-slate-900' },
+    { label: 'Clientes activos', value: resumen.clientes_activos.toString(), detail: 'En tu base de datos', icon: Users, tone: 'border-sky-100 bg-sky-50 text-sky-600', valueTone: 'text-slate-900' },
+  ]
 
   return (
     <main className="min-h-screen bg-[#f7faff] text-slate-900 pb-20">
