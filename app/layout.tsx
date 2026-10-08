@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   description: 'Sistema de gestión para la envasadora',
   // ¡NUEVO! Configuraciones específicas para PWA y Apple/iOS
   manifest: "/manifest.webmanifest",
+  // Ícono que usa iPhone/iPad al "Agregar a pantalla de inicio" (no lee los íconos del manifest)
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
