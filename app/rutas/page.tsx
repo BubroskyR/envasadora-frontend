@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, MapPin, MessageCircle, Menu, Users } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { apiGet } from '@/lib/api'
 import { bidonesUltimaEntregaPorCliente, calcularEstado, type Cliente, type EntregaBasica } from '@/lib/clientes'
 
@@ -119,12 +120,18 @@ export default function RutasPage() {
             </div>
             <span className="text-right text-[11px] font-semibold leading-4 text-slate-400">{selectedNeighborhood}</span>
           </div>
-          <button 
-            onClick={() => alert('Próximamente: Integración con API de WhatsApp')}
-            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] text-sm font-extrabold text-white shadow-[0_6px_16px_rgba(37,211,102,0.22)] transition hover:bg-[#20bd5b]"
+          {/* Avisar por WhatsApp a los clientes del barrio elegido (si no hay barrio, se elige en la pantalla de aviso) */}
+          <Link
+            href={selectedNeighborhood === 'Todos' ? '/avisar' : `/avisar?barrio=${encodeURIComponent(selectedNeighborhood)}`}
+            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-3 text-sm font-extrabold text-white shadow-[0_6px_16px_rgba(37,211,102,0.22)] transition hover:bg-[#20bd5b]"
           >
-            <MessageCircle className="size-5" />Notificar a {clientesVisibles.length} clientes
-          </button>
+            <MessageCircle className="size-5 shrink-0" />
+            <span className="truncate">
+              {selectedNeighborhood === 'Todos'
+                ? 'Avisar por WhatsApp a un barrio'
+                : `Avisar a ${clientesVisibles.length} ${clientesVisibles.length === 1 ? 'cliente' : 'clientes'} de ${selectedNeighborhood}`}
+            </span>
+          </Link>
         </section>
       </div>
     </main>

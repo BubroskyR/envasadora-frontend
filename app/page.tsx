@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   MapPin,
+  MessageCircle,
   Minus,
   Plus,
   Search,
@@ -463,6 +464,21 @@ export default function Page() {
             </span>
           )}
         </div>
+
+        {/* Al elegir el barrio que se va a visitar, se puede avisar a sus clientes por WhatsApp */}
+        {barrioSeleccionado !== 'Todos' && !cargando && !errorCarga && (
+          <Link
+            href={`/avisar?barrio=${encodeURIComponent(barrioSeleccionado)}`}
+            className="mb-3 flex items-center gap-3 rounded-xl bg-[#25D366] px-4 py-3 text-white shadow-[0_6px_16px_rgba(37,211,102,0.22)] transition hover:bg-[#20bd5b] active:scale-[0.99]"
+          >
+            <MessageCircle aria-hidden="true" className="size-5 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-extrabold">Avisar a los clientes de {barrioSeleccionado}</span>
+              <span className="block text-[11px] font-semibold text-white/85">Mensaje por WhatsApp de que hoy pasás por el barrio</span>
+            </span>
+            <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+          </Link>
+        )}
 
         {cargando ? (
           <div className="flex flex-col gap-1.5" aria-label="Cargando clientes">

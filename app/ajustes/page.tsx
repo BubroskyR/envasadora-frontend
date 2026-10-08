@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Settings, DollarSign, MapPin, Plus, X, LogOut } from 'lucide-react'
+import { Save, Settings, DollarSign, MapPin, Phone, Plus, X, LogOut } from 'lucide-react'
 import { CampoNumero } from '@/components/CampoNumero'
 import { guardarAjustes, useAjustes } from '@/lib/ajustes'
 import { cerrarSesion } from '@/lib/api'
@@ -12,8 +12,10 @@ export default function AjustesPage() {
   // Borradores locales: mientras el usuario no edite (null), se muestran los valores guardados.
   const [precioDraft, setPrecioDraft] = useState<number | '' | null>(null)
   const [barriosDraft, setBarriosDraft] = useState<string[] | null>(null)
+  const [codigoAreaDraft, setCodigoAreaDraft] = useState<string | null>(null)
   const precio = precioDraft ?? ajustes.precioBidon
   const barrios = barriosDraft ?? ajustes.barrios
+  const codigoArea = codigoAreaDraft ?? ajustes.codigoArea
 
   const [nuevoBarrio, setNuevoBarrio] = useState('')
   const [guardado, setGuardado] = useState(false)
@@ -36,13 +38,17 @@ export default function AjustesPage() {
 
   // Guardar todo en localStorage
   const handleGuardar = () => {
+    // Los códigos de área argentinos tienen de 2 a 4 dígitos (sin el 0); si no es válido se conserva el anterior
+    const codigoLimpio = codigoArea.replace(/\D/g, '').replace(/^0/, '')
     guardarAjustes({
       // Si el campo de precio quedó vacío o inválido, se conserva el precio anterior
       precioBidon: precio !== '' && precio > 0 ? precio : ajustes.precioBidon,
       barrios,
+      codigoArea: codigoLimpio.length >= 2 && codigoLimpio.length <= 4 ? codigoLimpio : ajustes.codigoArea,
     })
     setPrecioDraft(null)
     setBarriosDraft(null)
+    setCodigoAreaDraft(null)
     setGuardado(true)
     setTimeout(() => setGuardado(false), 3000)
   }
@@ -79,6 +85,27 @@ export default function AjustesPage() {
             </div>
             <p className="text-xs text-slate-500 mt-2">
               Este precio se aplicará automáticamente a todas las nuevas entregas que registres.
+            </p>
+          </div>
+
+          <div className="mt-6">
+            <label htmlFor="codigo-area" className="block text-sm font-semibold text-slate-700 mb-2">
+              Código de área de tu zona
+            </label>
+            <div className="relative">
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 size-5" />
+              <input
+                id="codigo-area"
+                type="text"
+                inputMode="numeric"
+                value={codigoArea}
+                onChange={(e) => setCodigoAreaDraft(e.target.value)}
+                placeholder="Ej. 3725"
+                className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all font-bold text-lg"
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Sin el 0. Al avisar por WhatsApp se usa para completar los teléfonos cargados sin código de área (por ejemplo &quot;15 412345&quot;).
             </p>
           </div>
         </section>
