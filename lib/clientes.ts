@@ -1,16 +1,18 @@
 import { diasDesde } from './fechas'
 
+// Los campos opcionales llegan como null cuando se dejaron vacíos al crear o editar el cliente:
+// nunca usar .toLowerCase() ni otros métodos de texto sobre ellos sin chequear antes.
 export interface Cliente {
   id: number;
   nombre: string;
-  direccion: string;
-  telefono?: string;
+  direccion: string | null;
+  telefono?: string | null;
   fecha_ultima_entrega: string | null;
   consumo_semanal_estimado: number;
   deuda_actual: string;
-  barrio?: string;
-  latitud?: string;
-  longitud?: string;
+  barrio?: string | null;
+  latitud?: string | null;
+  longitud?: string | null;
 }
 
 // Lo mínimo que se necesita de /api/entregas para calcular el nivel de agua

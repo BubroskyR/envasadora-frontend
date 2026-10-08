@@ -65,8 +65,8 @@ function FondoMapa() {
 interface ClienteProps {
   id: number;
   nombre: string;
-  latitud?: string;
-  longitud?: string;
+  latitud?: string | null;
+  longitud?: string | null;
   estado_agua: CustomerStatus;
 }
 

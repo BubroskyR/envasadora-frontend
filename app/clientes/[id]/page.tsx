@@ -94,7 +94,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         
         setEditForm({
           nombre: data.nombre,
-          direccion: data.direccion,
+          direccion: data.direccion || '',
           telefono: data.telefono || '',
           consumo_semanal_estimado: data.consumo_semanal_estimado,
           barrio: data.barrio || '',

@@ -30,6 +30,12 @@ const statusConfig: Record<CustomerStatus, { icon: typeof Check; tone: string; b
   fresh: { icon: Check, tone: 'bg-emerald-50 text-emerald-600', bar: 'bg-emerald-500', text: 'text-emerald-600' },
 }
 
+// Texto para comparar en la búsqueda: minúsculas y sin tildes ("Pérez" se encuentra buscando "perez").
+// Acepta null porque dirección y barrio pueden no estar cargados.
+function normalizar(texto: string | null | undefined) {
+  return (texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
 // Etiqueta corta para la barra: cuántos días de agua le quedan
 function diasCorto(estado: EstadoAgua) {
   if (!Number.isFinite(estado.diasRestantes)) return '—'
@@ -322,14 +328,15 @@ export default function Page() {
 
   // Primero se aplican búsqueda y barrio; sobre eso se cuentan los filtros rápidos
   const clientesBase = useMemo(() => {
-    const texto = busqueda.toLowerCase().trim();
+    const texto = normalizar(busqueda);
     const barrioBuscado = barrioSeleccionado.toLowerCase().trim();
 
     return clientesConEstado.filter(({ cliente }) => {
+      // direccion y barrio pueden venir en null (cliente cargado sin esos datos): normalizar lo tolera
       const matchesSearch = !texto ||
-        cliente.nombre.toLowerCase().includes(texto) ||
-        (cliente.barrio?.toLowerCase().includes(texto) ?? false) ||
-        cliente.direccion.toLowerCase().includes(texto);
+        normalizar(cliente.nombre).includes(texto) ||
+        normalizar(cliente.barrio).includes(texto) ||
+        normalizar(cliente.direccion).includes(texto);
       const matchesBarrio =
         barrioSeleccionado === 'Todos' ||
         cliente.barrio?.toLowerCase().trim() === barrioBuscado;
