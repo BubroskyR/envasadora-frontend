@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  ChevronRight,
   Fuel,
   Menu,
   ReceiptText,
@@ -118,10 +120,11 @@ export default function Page() {
   }))
 
   const metrics = [
-    { label: 'Dinero en la calle', value: money(Number(resumen.dinero_en_la_calle)), detail: `${resumen.clientes_con_deuda} cuentas pendientes`, icon: Wallet, tone: 'border-orange-100 bg-orange-50 text-orange-600', valueTone: 'text-orange-600' },
-    { label: 'Ingresos del mes', value: money(Number(resumen.ingresos_del_mes)), detail: 'Suma de ventas y abonos', icon: ArrowDownLeft, tone: 'border-emerald-100 bg-emerald-50 text-emerald-600', valueTone: 'text-emerald-600' },
-    { label: 'Gastos del mes', value: money(Number(resumen.gastos_del_mes)), detail: 'Operativos e insumos', icon: Fuel, tone: 'border-slate-200 bg-slate-50 text-slate-600', valueTone: 'text-slate-900' },
-    { label: 'Clientes activos', value: resumen.clientes_activos.toString(), detail: 'En tu base de datos', icon: Users, tone: 'border-sky-100 bg-sky-50 text-sky-600', valueTone: 'text-slate-900' },
+    // Cada tarjeta abre su historial mensual completo
+    { label: 'Dinero en la calle', href: '/finanzas/deuda', value: money(Number(resumen.dinero_en_la_calle)), detail: `${resumen.clientes_con_deuda} cuentas pendientes`, icon: Wallet, tone: 'border-orange-100 bg-orange-50 text-orange-600', valueTone: 'text-orange-600' },
+    { label: 'Ingresos del mes', href: '/finanzas/ingresos', value: money(Number(resumen.ingresos_del_mes)), detail: 'Suma de ventas y abonos', icon: ArrowDownLeft, tone: 'border-emerald-100 bg-emerald-50 text-emerald-600', valueTone: 'text-emerald-600' },
+    { label: 'Gastos del mes', href: '/finanzas/gastos', value: money(Number(resumen.gastos_del_mes)), detail: 'Operativos e insumos', icon: Fuel, tone: 'border-slate-200 bg-slate-50 text-slate-600', valueTone: 'text-slate-900' },
+    { label: 'Clientes activos', href: '/finanzas/clientes', value: resumen.clientes_activos.toString(), detail: 'En tu base de datos', icon: Users, tone: 'border-sky-100 bg-sky-50 text-sky-600', valueTone: 'text-slate-900' },
   ]
 
   return (
@@ -143,14 +146,17 @@ export default function Page() {
           {metrics.map((metric) => {
             const Icon = metric.icon
             return (
-              <article key={metric.label} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_22px_rgba(15,23,42,0.05)] sm:p-5">
+              <Link key={metric.label} href={metric.href} className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_6px_22px_rgba(15,23,42,0.05)] transition hover:border-sky-200 active:scale-[0.98] sm:p-5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="max-w-[135px] text-xs font-semibold leading-4 text-slate-500">{metric.label}</p>
                   <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg border ${metric.tone}`}><Icon aria-hidden="true" className="size-4" /></span>
                 </div>
                 <p className={`mt-4 text-2xl font-extrabold tracking-tight ${metric.valueTone}`}>{metric.value}</p>
                 <p className="mt-1 text-[11px] leading-4 text-slate-400">{metric.detail}</p>
-              </article>
+                <p className="mt-2 flex items-center gap-0.5 text-[11px] font-bold text-sky-600">
+                  Ver por mes <ChevronRight aria-hidden="true" className="size-3.5 transition group-hover:translate-x-0.5" />
+                </p>
+              </Link>
             )
           })}
         </section>

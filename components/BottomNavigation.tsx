@@ -22,7 +22,8 @@ export function BottomNavigation() {
       <div className="mx-auto flex max-w-2xl justify-around">
         {navigationItems.map((item) => {
           const Icon = item.icon
-          const isActive = item.href !== '#' && pathname === item.href
+          // También queda marcada en sus subpantallas (ej. /finanzas/ingresos marca "Finanzas")
+          const isActive = item.href !== '#' && (pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`)))
 
           return (
             <Link

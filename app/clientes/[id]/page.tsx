@@ -25,10 +25,25 @@ interface Entrega {
   id: number;
   fecha: string;
   cantidad_bidones: number;
-  monto_total: string;
   monto_pagado: string;
+  // Lo que quedó debiendo en esa entrega (total - pagado)
   monto_adeudado: string;
+  creado_en: string;
 }
+
+// Pago de un saldo pendiente, registrado desde "Registrar Pago"
+interface Pago {
+  id: number;
+  fecha: string;
+  monto: string;
+  metodo_pago: string;
+  creado_en: string;
+}
+
+// El historial mezcla entregas y pagos de deuda en una sola lista ordenada por fecha
+type Movimiento =
+  | { tipo: 'entrega'; fecha: string; creado_en: string; entrega: Entrega }
+  | { tipo: 'pago'; fecha: string; creado_en: string; pago: Pago }
 
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -38,7 +53,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [errorCarga, setErrorCarga] = useState(false);
   const [entregas, setEntregas] = useState<Entrega[]>([]);
-  
+  const [pagos, setPagos] = useState<Pago[]>([]);
+
   const [isPagarOpen, setIsPagarOpen] = useState(false);
   const [montoPago, setMontoPago] = useState<number | ''>('');
   const [isSubmittingPago, setIsSubmittingPago] = useState(false);
@@ -94,6 +110,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     apiGet<Entrega[]>(`/clientes/${id}/entregas`)
       .then(data => setEntregas(data))
       .catch(err => console.error("Error al cargar historial:", err));
+
+    apiGet<Pago[]>(`/clientes/${id}/pagos`)
+      .then(data => setPagos(data))
+      .catch(err => console.error("Error al cargar pagos:", err));
   }, [id]);
 
   useEffect(() => {
@@ -149,7 +169,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   // NUEVA FUNCIÓN PARA ELIMINAR CLIENTE
   const handleEliminarCliente = async () => {
-    if (!window.confirm(`¿Estás seguro de eliminar a ${cliente?.nombre}? Esta acción no se puede deshacer.`)) {
+    if (!window.confirm(`¿Estás seguro de eliminar a ${cliente?.nombre}? Dejará de aparecer en la app, pero sus entregas y pagos se mantienen en el historial de finanzas.`)) {
       return;
     }
 
@@ -206,10 +226,16 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const deudaNumerica = Number(cliente.deuda_actual);
   const tieneDeuda = deudaNumerica > 0;
 
-  const mesesDisponibles = Array.from(new Set(entregas.map(e => e.fecha.substring(0, 7))));
-  const entregasMostradas = mesSeleccionado === 'todos' 
-    ? entregas 
-    : entregas.filter(e => e.fecha.substring(0, 7) === mesSeleccionado);
+  // Más reciente primero; si son del mismo día, ordena por la hora en que se cargaron
+  const movimientos: Movimiento[] = [
+    ...entregas.map(entrega => ({ tipo: 'entrega' as const, fecha: entrega.fecha.substring(0, 10), creado_en: entrega.creado_en ?? '', entrega })),
+    ...pagos.map(pago => ({ tipo: 'pago' as const, fecha: pago.fecha.substring(0, 10), creado_en: pago.creado_en ?? '', pago })),
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.creado_en.localeCompare(a.creado_en));
+
+  const mesesDisponibles = Array.from(new Set(movimientos.map(m => m.fecha.substring(0, 7))));
+  const movimientosMostrados = mesSeleccionado === 'todos'
+    ? movimientos
+    : movimientos.filter(m => m.fecha.substring(0, 7) === mesSeleccionado);
 
   return (
     <main className="min-h-screen bg-[#f7faff] text-slate-900 pb-10">
@@ -332,10 +358,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-600">Actividad reciente</p>
-              <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-950">Historial de entregas</h2>
+              <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-950">Historial de entregas y pagos</h2>
             </div>
-            
-            {entregas.length > 0 && (
+
+            {movimientos.length > 0 && (
               <label className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm cursor-pointer hover:bg-slate-50">
                 <select
                   value={mesSeleccionado}
@@ -363,27 +389,46 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               <span>Fecha</span><span>Pedido</span><span className="text-right">Pagó</span>
             </div>
             
-            {entregasMostradas.length === 0 ? (
+            {movimientosMostrados.length === 0 ? (
                <div className="p-4 text-center text-sm text-slate-500">
-                 {mesSeleccionado === 'todos' ? 'Aún no hay entregas registradas.' : 'No hubo entregas en este mes.'}
+                 {mesSeleccionado === 'todos' ? 'Aún no hay movimientos registrados.' : 'No hubo movimientos en este mes.'}
                </div>
             ) : (
-              entregasMostradas.map((entrega) => {
-                const total = Number(entrega.monto_total);
+              movimientosMostrados.map((movimiento) => {
+                const fechaCorta = parseFecha(movimiento.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
+
+                if (movimiento.tipo === 'pago') {
+                  const { pago } = movimiento;
+                  return (
+                    <div key={`p-${pago.id}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-slate-50 last:border-0 bg-emerald-50/40 px-3 py-2.5 text-xs sm:grid-cols-[1.4fr_0.8fr_0.8fr_1fr]">
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                          <Banknote aria-hidden="true" className="size-3.5" />
+                        </span>
+                        <span className="font-bold text-slate-800">{fechaCorta}</span>
+                      </div>
+                      <span className="text-slate-500">Pago de saldo pendiente</span>
+                      <div className="flex flex-col text-right">
+                        <span className="font-bold text-emerald-600">{money(Number(pago.monto))}</span>
+                        <span className="text-[10px] font-semibold text-emerald-600/80">Abonó deuda</span>
+                      </div>
+                    </div>
+                  )
+                }
+
+                const { entrega } = movimiento;
                 const pagado = Number(entrega.monto_pagado);
-                const deudaGenerada = total - pagado;
+                const deudaGenerada = Number(entrega.monto_adeudado);
 
                 return (
-                  <div key={entrega.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-slate-50 last:border-0 px-3 py-2.5 text-xs sm:grid-cols-[1.4fr_0.8fr_0.8fr_1fr]">
+                  <div key={`e-${entrega.id}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-slate-50 last:border-0 px-3 py-2.5 text-xs sm:grid-cols-[1.4fr_0.8fr_0.8fr_1fr]">
                     <div className="flex items-center gap-2">
                       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sky-50 text-sky-600">
                         <Droplets aria-hidden="true" className="size-3.5" />
                       </span>
-                      <span className="font-bold text-slate-800">
-                        {parseFecha(entrega.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                      </span>
+                      <span className="font-bold text-slate-800">{fechaCorta}</span>
                     </div>
-                    <span className="text-slate-500">{entrega.cantidad_bidones} bidones</span>
+                    <span className="text-slate-500">{entrega.cantidad_bidones} {entrega.cantidad_bidones === 1 ? 'bidón' : 'bidones'}</span>
                     <div className="flex flex-col text-right">
                       <span className="font-bold text-slate-700">{money(pagado)}</span>
                       {deudaGenerada > 0 && (
@@ -395,7 +440,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               })
             )}
             <div className="border-t border-slate-100 px-3 py-2 text-right text-[11px] font-medium text-slate-400">
-              {entregasMostradas.length} {entregasMostradas.length === 1 ? 'movimiento' : 'movimientos'}
+              {movimientosMostrados.length} {movimientosMostrados.length === 1 ? 'movimiento' : 'movimientos'}
             </div>
           </div>
         </section>

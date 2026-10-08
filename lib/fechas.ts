@@ -8,6 +8,18 @@ export function parseFecha(fecha: string): Date {
   return new Date(y, m - 1, d)
 }
 
+// "2026-10" → "Octubre 2026" (o "Oct 2026" con corto = true)
+export function nombreMes(mes: string, corto = false): string {
+  const [y, m] = mes.split('-').map(Number)
+  const texto = new Date(y, m - 1, 15).toLocaleDateString('es-AR', { month: corto ? 'short' : 'long', year: 'numeric' })
+  return (texto.charAt(0).toUpperCase() + texto.slice(1)).replace(' de ', ' ').replace('.', '')
+}
+
+// "2026-10-07" → "07 oct"
+export function fechaCorta(fecha: string): string {
+  return parseFecha(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '')
+}
+
 // Días de calendario completos entre la fecha dada y hoy (0 = hoy).
 export function diasDesde(fecha: string, ahora: Date = new Date()): number {
   const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
