@@ -6,3 +6,42 @@ body {
   color: #0f172a;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* --- Mapa (Leaflet): controles y globos con el mismo estilo redondeado que el resto de la app --- */
+.leaflet-container {
+  font-family: inherit;
+}
+
+.leaflet-bar {
+  border: none !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12) !important;
+}
+
+.leaflet-bar a {
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  color: #334155 !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+}
+
+.leaflet-popup-content {
+  margin: 10px 16px;
+}
+
+.leaflet-popup-tip {
+  box-shadow: none;
+}
+
+.leaflet-control-attribution {
+  font-size: 9px;
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-top-left-radius: 8px;
+}
