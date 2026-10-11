@@ -73,6 +73,7 @@ function AvisarContenido() {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
     .map(cliente => {
       const numero = numeroWhatsApp(cliente.telefono, codigoArea)
+      // Siempre el nombre real, nunca el apodo: el apodo es solo para uso interno
       const texto = armarMensaje(mensaje, { nombre: cliente.nombre, barrio })
       return { cliente, numero, link: numero ? linkWhatsApp(numero, texto) : null }
     }), [clientes, barrio, codigoArea, mensaje])
@@ -211,7 +212,10 @@ function AvisarContenido() {
                       {!link ? <AlertTriangle aria-hidden="true" className="size-4" /> : enviadoA ? <Check aria-hidden="true" className="size-4" /> : cliente.nombre.charAt(0).toUpperCase()}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-800">{cliente.nombre}</p>
+                      <p className="truncate text-sm font-bold text-slate-800">
+                        {cliente.nombre}
+                        {cliente.apodo && <span className="font-semibold text-slate-400"> · {cliente.apodo}</span>}
+                      </p>
                       <p className={`mt-0.5 truncate text-[11px] ${numero ? 'text-slate-500' : 'font-semibold text-amber-700'}`}>
                         {numero
                           ? enviadoA ? `${formatearNumero(numero)} · avisado ${horaCorta(enviadoA)}` : formatearNumero(numero)

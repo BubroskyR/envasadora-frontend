@@ -23,7 +23,7 @@ import { bidonesUltimaEntregaPorCliente, calcularEstado, money, type Cliente, ty
 const FILTROS = ['Todos', 'Urgentes', 'Con Deuda', 'Al Día'] as const
 type Filtro = typeof FILTROS[number]
 
-const FORM_VACIO = { nombre: '', direccion: '', telefono: '', consumo_semanal_estimado: 1 as number | '', barrio: '', latitud: '', longitud: '' }
+const FORM_VACIO = { nombre: '', apodo: '', direccion: '', telefono: '', consumo_semanal_estimado: 1 as number | '', barrio: '', latitud: '', longitud: '' }
 
 const statusConfig: Record<CustomerStatus, { icon: typeof Check; tone: string; bar: string; text: string }> = {
   urgent: { icon: AlertTriangle, tone: 'bg-rose-50 text-rose-600', bar: 'bg-rose-500', text: 'text-rose-600' },
@@ -59,7 +59,10 @@ function ClienteFila({ cliente, estado, onEntregar }: { cliente: Cliente, estado
       {/* Tocar la fila abre el perfil del cliente */}
       <Link href={`/clientes/${cliente.id}`} className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-[13px] font-bold text-slate-900">{cliente.nombre}</h3>
+          <h3 className="truncate text-[13px] font-bold text-slate-900">
+            {cliente.nombre}
+            {cliente.apodo && <span className="font-semibold text-slate-400"> · {cliente.apodo}</span>}
+          </h3>
           {deuda > 0 && <span className="shrink-0 text-[10px] font-bold text-rose-600">Debe {money(deuda)}</span>}
         </div>
         <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] font-medium text-slate-500">
@@ -336,6 +339,7 @@ export default function Page() {
       // direccion y barrio pueden venir en null (cliente cargado sin esos datos): normalizar lo tolera
       const matchesSearch = !texto ||
         normalizar(cliente.nombre).includes(texto) ||
+        normalizar(cliente.apodo).includes(texto) ||
         normalizar(cliente.barrio).includes(texto) ||
         normalizar(cliente.direccion).includes(texto);
       const matchesBarrio =
@@ -387,12 +391,12 @@ export default function Page() {
           {/* BUSCADOR Y SELECTOR DE BARRIO */}
           <div className="mt-3 flex gap-2">
             <label className="relative block min-w-0 flex-1">
-              <span className="sr-only">Buscar por nombre, dirección o barrio</span>
+              <span className="sr-only">Buscar por nombre, apodo, dirección o barrio</span>
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar nombre, dirección o barrio"
+                placeholder="Buscar nombre, apodo o dirección"
                 className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-sm font-medium text-slate-800 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
               />
               {busqueda && (
@@ -554,6 +558,17 @@ export default function Page() {
                   onChange={(e) => setAddForm({...addForm, nombre: e.target.value})}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apodo (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Ej: El Tano"
+                  value={addForm.apodo}
+                  onChange={(e) => setAddForm({...addForm, apodo: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Sirve para buscarlo. Los avisos de WhatsApp usan el nombre.</p>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dirección</label>

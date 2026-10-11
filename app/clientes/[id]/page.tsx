@@ -68,6 +68,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   const [editForm, setEditForm] = useState<{
     nombre: string;
+    apodo: string;
     direccion: string;
     telefono: string;
     consumo_semanal_estimado: number | '';
@@ -76,6 +77,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
     longitud: string;
   }>({
     nombre: '',
+    apodo: '',
     direccion: '',
     telefono: '',
     consumo_semanal_estimado: 1,
@@ -94,6 +96,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         
         setEditForm({
           nombre: data.nombre,
+          apodo: data.apodo || '',
           direccion: data.direccion || '',
           telefono: data.telefono || '',
           consumo_semanal_estimado: data.consumo_semanal_estimado,
@@ -269,6 +272,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-600">Cliente # {cliente.id}</p>
               <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-950">{cliente.nombre}</h2>
+              {cliente.apodo && <p className="text-sm font-semibold text-slate-400">&ldquo;{cliente.apodo}&rdquo;</p>}
               <p className="mt-1.5 flex items-start gap-1.5 text-sm leading-5 text-slate-500">
                 <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-slate-400" />
                 <span>{cliente.direccion} {cliente.barrio && `- ${cliente.barrio}`}</span>
@@ -467,6 +471,17 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   onChange={(e) => setEditForm({...editForm, nombre: e.target.value})}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Apodo (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Ej: El Tano"
+                  value={editForm.apodo}
+                  onChange={(e) => setEditForm({...editForm, apodo: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition-all"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Sirve para buscarlo. Los avisos de WhatsApp usan el nombre.</p>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Dirección</label>

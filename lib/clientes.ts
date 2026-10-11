@@ -5,6 +5,8 @@ import { diasDesde } from './fechas'
 export interface Cliente {
   id: number;
   nombre: string;
+  // Solo para reconocerlo y buscarlo en la app: los avisos por WhatsApp usan siempre el nombre
+  apodo?: string | null;
   direccion: string | null;
   telefono?: string | null;
   fecha_ultima_entrega: string | null;
